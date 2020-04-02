@@ -8,6 +8,8 @@
 #define MAX_THRUST 100
 #define MAX_ANGLE_ALLOWED_BOOST 10
 #define MIN_DISTANCE_ALLOWED_BOOST 5000
+#define SHIP_RADIUS 400
+#define CLOSE_PADDING 100
 
 using namespace std;
 
@@ -54,6 +56,10 @@ bool canRam(int x, int y, int checkX, int checkY, int opponentX, int opponentY, 
     return opponentInFront && opponentClose && opponentCloseToCheck && abs(angle) < 30;
 }
 
+bool opponentClose(int x, int y, int opponentX, int opponentY) {
+    return sqrt((x - opponentX) * (x - opponentX) + (y - opponentY) * (y - opponentY)) < SHIP_RADIUS * 2 + CLOSE_PADDING;
+}
+
 
 /**
  * This code automatically collects game data in an infinite loop.
@@ -79,16 +85,20 @@ int main() {
         cin >> x >> y >> nextCheckpointX >> nextCheckpointY >> nextCheckpointDist >> nextCheckpointAngle;
         cin >> opponentX >> opponentY;
 
-        int thrust = MAX_THRUST;
+        string thrust = to_string(MAX_THRUST);
         if ((nextCheckpointDist < 3000 && abs(nextCheckpointAngle) > 60) || abs(nextCheckpointAngle) > 100) {
-            thrust = 0;
+            thrust = "0";
         }
 
         cerr << " dist: " << nextCheckpointDist;
         bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
         cerr << " can ram: " << &canRam;
         if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
-            thrust = 5;
+            if (opponentClose(x, y, opponentX, opponentY)) {
+                thrust = "SHIELD";
+            } else {
+                thrust = "5";
+            }
         }
 
         if (nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST && !boostUsed) {
