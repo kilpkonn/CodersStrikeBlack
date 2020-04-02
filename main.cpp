@@ -10,24 +10,30 @@
 #define MIN_DISTANCE_ALLOWED_BOOST 5000
 #define SHIP_RADIUS 400
 #define CLOSE_PADDING 100
+#define PI 3.14159265
 
 using namespace std;
 
-struct Checkpoint {
+struct Point2D {
     int x, y;
 
-    bool operator == (const Checkpoint& c) const {
-        return x == c.x && y == c.y;
+    Point2D(int x_, int y_) {
+        x = x_;
+        y = y_;
     }
 
-    bool operator != (const Checkpoint& c) const {
-        return x != c.x || y != c.y;
+    bool operator == (const Point2D& p) const {
+        return x == p.x && y == p.y;
+    }
+
+    bool operator != (const Point2D& p) const {
+        return x != p.x || y != p.y;
     }
 };
 
 class Track {
-
-    void onNewCheckpoint(Checkpoint point) {
+public:
+    void onNewCheckpoint(Point2D point) {
         if (allCheckpointsFound) return;
 
         if (checkpoints.empty()) {
@@ -37,11 +43,40 @@ class Track {
             if (checkpoints.front() == point) {
                 allCheckpointsFound = true;
             }
+            cerr << "New point: " << checkpoints.back().x << " - " << checkpoints.back().y;
         }
     }
 
+    /**
+     * @param x ship x
+     * @param y ship y
+     * @param currentCP
+     * @return - means left, + means right
+     */
+    double angleToNextCp(int x, int y, Point2D& currentCP) {
+        unsigned index = (getCPIndex(currentCP) + 1) % checkpoints.size();
+        if (index < 0 || !allCheckpointsFound)
+            return 0;
+        Point2D* nextCpPtr = &checkpoints[index];
+        int dx = nextCpPtr->x - currentCP.x;
+        int dy = nextCpPtr->y - currentCP.y;
+        double pointsAngle = atan2(dy, dx) * 180 / PI;
+        double shipAngle = atan2(currentCP.y - y, currentCP.x - x) * 180 / PI;
+        // cerr << " angle p: " << pointsAngle << endl;
+        // cerr << " angle ship: " << shipAngle << endl;
+        return pointsAngle - shipAngle;
+    }
+
+    int getCPIndex(Point2D& cp) {
+        if (checkpoints.empty()) return -1;
+        auto itr = find_if(checkpoints.cbegin(), checkpoints.cend(), [&cp](Point2D const& ca){ return ca == cp;});
+        if (itr != checkpoints.cend())
+            return std::distance(checkpoints.cbegin(), itr);
+        return -1;
+    }
+
 private:
-    vector<Checkpoint> checkpoints;
+    vector<Point2D> checkpoints;
     bool allCheckpointsFound = false;
 };
 
@@ -70,6 +105,7 @@ bool opponentClose(int x, int y, int opponentX, int opponentY) {
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 int main() {
     bool boostUsed = false;
+    Track track;
     // game loop
     while (1) {
         int x; // x position of your pod
@@ -85,12 +121,16 @@ int main() {
         cin >> x >> y >> nextCheckpointX >> nextCheckpointY >> nextCheckpointDist >> nextCheckpointAngle;
         cin >> opponentX >> opponentY;
 
+        Point2D currentCP = Point2D(nextCheckpointX, nextCheckpointY);
+        track.onNewCheckpoint(currentCP);
+        double nextAngle = track.angleToNextCp(x, y, currentCP);
+
         string thrust = to_string(MAX_THRUST);
         if ((nextCheckpointDist < 3000 && abs(nextCheckpointAngle) > 60) || abs(nextCheckpointAngle) > 100) {
             thrust = "0";
         }
 
-        cerr << " dist: " << nextCheckpointDist;
+        cerr << " dist: " << nextCheckpointDist << " next angle: " << nextAngle;
         bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
         cerr << " can ram: " << &canRam;
         if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
