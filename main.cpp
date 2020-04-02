@@ -6,6 +6,8 @@
 
 #define CHECKPOINT_RADIUS 600
 #define MAX_THRUST 100
+#define MAX_ANGLE_ALLOWED_BOOST 10
+#define MIN_DISTANCE_ALLOWED_BOOST 5000
 
 using namespace std;
 
@@ -42,7 +44,7 @@ private:
 };
 
 bool canRam(int x, int y, int checkX, int checkY, int opponentX, int opponentY, int angle) {
-    bool opponentInFront = abs(opponentX - checkX) < abs(x - checkX) && abs(opponentY < checkY) < abs(y - checkY);
+    bool opponentInFront = abs(opponentX - checkX) < abs(x - checkX) && abs(opponentY - checkY) < abs(y - checkY);
     cerr << " In front:"<< opponentInFront;
     bool opponentClose = abs(opponentY - y) < 600 && abs(opponentX - x) < 600;
     cerr << " close: "<< opponentClose;
@@ -52,11 +54,14 @@ bool canRam(int x, int y, int checkX, int checkY, int opponentX, int opponentY, 
     return opponentInFront && opponentClose && opponentCloseToCheck && abs(angle) < 30;
 }
 
+
 /**
  * This code automatically collects game data in an infinite loop.
  * It uses the standard input to place data into the game variables such as x and y.
  * YOU DO NOT NEED TO MODIFY THE INITIALIZATION OF THE GAME VARIABLES.
  **/
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
 int main() {
     bool boostUsed = false;
     // game loop
@@ -78,28 +83,21 @@ int main() {
         if ((nextCheckpointDist < 3000 && abs(nextCheckpointAngle) > 60) || abs(nextCheckpointAngle) > 100) {
             thrust = 0;
         }
-        // canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
+
         cerr << " dist: " << nextCheckpointDist;
         bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
-        cerr << " can ram: " << canRam;
+        cerr << " can ram: " << &canRam;
         if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
             thrust = 5;
         }
 
-        // Write an action using cout. DON'T FORGET THE "<< endl"
-        // To debug: cerr << "Debug messages..." << endl;
-
-
-        // Edit this line to output the target position
-        // and thrust (0 <= thrust <= 100)
-        // i.e.: "x y thrust"
-        if (nextCheckpointDist > 5000 && nextCheckpointAngle < 10 && nextCheckpointAngle > -10 && !boostUsed) {
+        if (nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST && !boostUsed) {
             cout << nextCheckpointX << " " << nextCheckpointY << " BOOST" << endl;
             boostUsed = true;
         } else {
             cout << nextCheckpointX << " " << nextCheckpointY << " " << thrust << endl;
         }
         cerr << endl;
-
     }
 }
+#pragma clang diagnostic pop
