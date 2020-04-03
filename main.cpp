@@ -11,7 +11,7 @@
 #define SHIP_RADIUS 400
 #define CLOSE_PADDING 100
 #define PI 3.14159265
-#define TARGET_AHEAD_DISTANCE 2000
+#define TARGET_AHEAD_DISTANCE 5000
 
 using namespace std;
 
@@ -37,9 +37,9 @@ public:
     bool allCheckpointsFound = false;
 
     void onNewCheckpoint(Point2D point) {
-        for (int i = 0; i < checkpoints.size(); i++) {
+        /*for (int i = 0; i < checkpoints.size(); i++) {
             cerr << "Cp: " << i << " " << checkpoints[i].x << " - " << checkpoints[i].y << endl;
-        }
+        }*/
         if (allCheckpointsFound) return;
 
         if (checkpoints.empty()) {
@@ -73,7 +73,10 @@ public:
         double shipAngle = atan2(currentCP.y - ship.y, currentCP.x - ship.x) * 180 / PI;
         // cerr << " angle p: " << pointsAngle << endl;
         // cerr << " angle ship: " << shipAngle << endl;
-        return pointsAngle - shipAngle;
+        double angle = pointsAngle - shipAngle;
+        if (angle > 180) angle -= 360;
+        if (angle < -180) angle += 260;
+        return angle;
     }
 
     int getCPIndex(Point2D &cp) {
@@ -92,10 +95,11 @@ public:
 
     double calcOptimalAngle(int distance, double nextAngle) {
         // x*x*x/8000 - x*x/60 + x/6+ 30
-        distance = distance / 100 - 60;
-        if (distance > 130) distance = 140;
+        if (abs(nextAngle) > 160) nextAngle = nextAngle > 0 ? 160 : -160;
+        distance = distance / 100 - 70;
+        if (distance > 75) distance = 75;
         cerr << "Optimal angle x: " << distance << endl;
-        return -nextAngle * (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 100;
+        return -nextAngle * (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 170;
     }
 
 #pragma clang diagnostic push
@@ -104,7 +108,8 @@ public:
     Point2D calcOptimalTarget(Point2D &pos, Point2D &cp, double optimalAngle) {
         double angle = atan2(pos.y - cp.y, pos.x - cp.x) * 180 / PI;
         cerr << "CP angle: " << angle << endl;
-        double radAngle = (0 + angle) / 180 * PI;
+        cerr << "Optimal angle: " << optimalAngle << endl;
+        double radAngle = (optimalAngle + angle) / 180 * PI;
         cerr << "DX: " << TARGET_AHEAD_DISTANCE * cos(radAngle) << endl;
         cerr << "DY: " << TARGET_AHEAD_DISTANCE * sin(radAngle) << endl;
         return Point2D(pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
@@ -169,7 +174,7 @@ int main() {
 
         string thrust = to_string(MAX_THRUST);
 
-        cerr << " dist: " << nextCheckpointDist << " next angle: " << nextAngle;
+        cerr << "Dist: " << nextCheckpointDist << " next angle: " << nextAngle;
         bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
         //cerr << " can ram: " << &canRam;
 
@@ -194,16 +199,30 @@ int main() {
         if (track.allCheckpointsFound) {
             double angle = track.calcOptimalAngle(nextCheckpointDist, nextAngle);
             cerr << "Smart angle: " << angle << endl;
-            target = track.calcOptimalTarget(shipLoc, currentCP, angle);
+            //if (abs(angle) < 160) {
+                target = track.calcOptimalTarget(shipLoc, currentCP, angle);
+            //}
+        } else {
+            cerr << "CP real angle: " << nextCheckpointAngle << endl;
+            if (nextCheckpointAngle < 90) {
+                target = track.calcOptimalTarget(shipLoc, currentCP, nextCheckpointAngle / 1.5);
+            }
+
+            if (nextCheckpointDist < CHECKPOINT_RADIUS * 1.2) {
+                thrust = "5";
+            }
+            if (abs(nextCheckpointAngle) > 85) {
+                thrust = "5";
+            }
         }
 
-        if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
+        /*if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
             if (opponentClose(x, y, opponentX, opponentY)) {
                 thrust = "SHIELD";
             } else if (!track.allCheckpointsFound) {
                 thrust = "5";
             }
-        }
+        }*/
 
         if (nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST &&
             !boostUsed) {
