@@ -37,6 +37,9 @@ public:
     bool allCheckpointsFound = false;
 
     void onNewCheckpoint(Point2D point) {
+        for (int i = 0; i < checkpoints.size(); i++) {
+            cerr << "Cp: " << i << " " << checkpoints[i].x << " - " << checkpoints[i].y << endl;
+        }
         if (allCheckpointsFound) return;
 
         if (checkpoints.empty()) {
@@ -61,6 +64,9 @@ public:
         if (index < 0 || !allCheckpointsFound)
             return 0;
         Point2D *nextCpPtr = &checkpoints[(index + 1) % checkpoints.size()];
+
+        cerr << "Next CP: " << index << " (" << nextCpPtr->x << ", " << nextCpPtr->y << ")" << endl;
+
         int dx = nextCpPtr->x - currentCP.x;
         int dy = nextCpPtr->y - currentCP.y;
         double pointsAngle = atan2(dy, dx) * 180 / PI;
@@ -86,15 +92,22 @@ public:
 
     double calcOptimalAngle(int distance, double nextAngle) {
         // x*x*x/8000 - x*x/60 + x/6+ 30
-        distance = distance / 100 - 70;
+        distance = distance / 100 - 60;
+        if (distance > 130) distance = 140;
+        cerr << "Optimal angle x: " << distance << endl;
         return -nextAngle * (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 100;
     }
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "bugprone-narrowing-conversions"
 
-    Point2D calcOptimalTarget(Point2D &pos, double &angle) {
-        return Point2D(pos.x + TARGET_AHEAD_DISTANCE * cos(angle), pos.y + TARGET_AHEAD_DISTANCE * sin(angle));
+    Point2D calcOptimalTarget(Point2D &pos, Point2D &cp, double optimalAngle) {
+        double angle = atan2(pos.y - cp.y, pos.x - cp.x) * 180 / PI;
+        cerr << "CP angle: " << angle << endl;
+        double radAngle = (0 + angle) / 180 * PI;
+        cerr << "DX: " << TARGET_AHEAD_DISTANCE * cos(radAngle) << endl;
+        cerr << "DY: " << TARGET_AHEAD_DISTANCE * sin(radAngle) << endl;
+        return Point2D(pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
 #pragma clang diagnostic pop
@@ -158,7 +171,7 @@ int main() {
 
         cerr << " dist: " << nextCheckpointDist << " next angle: " << nextAngle;
         bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
-        cerr << " can ram: " << &canRam;
+        //cerr << " can ram: " << &canRam;
 
         /*if (nextCheckpointDist < 2000) {
             if (nextAngle * nextCheckpointAngle > 0 || (nextCheckpointDist < 1000 && abs(nextCheckpointAngle) < 30)) {
@@ -177,10 +190,11 @@ int main() {
             }
         }*/
 
+
         if (track.allCheckpointsFound) {
-            double angle = nextCheckpointAngle + track.calcOptimalAngle(nextCheckpointDist, nextAngle);
-            cerr << " Smart angle: " << angle << endl;
-            target = track.calcOptimalTarget(shipLoc, angle);
+            double angle = track.calcOptimalAngle(nextCheckpointDist, nextAngle);
+            cerr << "Smart angle: " << angle << endl;
+            target = track.calcOptimalTarget(shipLoc, currentCP, angle);
         }
 
         if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
