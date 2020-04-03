@@ -7,7 +7,7 @@
 #define CHECKPOINT_RADIUS 600
 #define MAX_THRUST 100
 #define MAX_ANGLE_ALLOWED_BOOST 10
-#define MIN_DISTANCE_ALLOWED_BOOST 5000
+#define MIN_DISTANCE_ALLOWED_BOOST 6000
 #define SHIP_RADIUS 400
 #define CLOSE_PADDING 100
 #define PI 3.14159265
@@ -202,17 +202,54 @@ int main() {
             //if (abs(angle) < 160) {
                 target = track.calcOptimalTarget(shipLoc, currentCP, angle);
             //}
+
+            if (nextCheckpointAngle > 65 ) {
+                cerr << "A" << endl;
+                thrust = "10";
+            }
+            if (abs(nextAngle) > 150 && nextCheckpointDist < 1200) {
+                cerr << "B" << endl;
+                thrust = "10";
+            }
+
+            // Hax
+            if (abs(currentCP.x - 10565) < 150 &&  abs(currentCP.y - 5973) < 150) {
+                cerr << "XD" << endl;
+                target = Point2D(11350, 6000);
+            } else if (abs(currentCP.x - 13116) < 150 &&  abs(currentCP.y - 2317) < 150) {
+                target = Point2D(12700, 2850);
+            } else if (abs(currentCP.x - 7347) < 150 &&  abs(currentCP.y - 4943) < 150) {
+                target = Point2D(6600, 3700);
+            } else if (abs(currentCP.x - 12920) < 150 &&  abs(currentCP.y -7241) < 150) {
+                target = Point2D(12500, 6700);
+            } else if (abs(currentCP.x - 6300) < 150 &&  abs(currentCP.y -7700) < 150) {
+                target = Point2D(6300, 6700);
+            } else if (abs(currentCP.x - 5950) < 150 &&  abs(currentCP.y -4222) < 150) {
+                target = Point2D(4700, 4200);
+            } else if (abs(currentCP.x - 8700) < 150 &&  abs(currentCP.y -7440) < 150) {
+                target = Point2D(9100, 7000);
+            }
+
         } else {
             cerr << "CP real angle: " << nextCheckpointAngle << endl;
-            if (nextCheckpointAngle < 90) {
+            /*if (nextCheckpointAngle < 60) {
                 target = track.calcOptimalTarget(shipLoc, currentCP, nextCheckpointAngle / 1.5);
-            }
+            }*/
 
             if (nextCheckpointDist < CHECKPOINT_RADIUS * 1.2) {
                 thrust = "5";
             }
-            if (abs(nextCheckpointAngle) > 85) {
+            if (abs(nextCheckpointAngle) > 75) {
                 thrust = "5";
+            }
+
+            // Hax
+            if (abs(currentCP.x - 11205) < 150 &&  abs(currentCP.y - 5421) < 150) {
+                cerr << "XD" << endl;
+                target = Point2D(10200, 5200);
+            } else if (abs(currentCP.x - 6000) < 150 &&  abs(currentCP.y - 5350) < 150) {
+                cerr << "XD" << endl;
+                target = Point2D(6600, 5300);
             }
         }
 
@@ -224,8 +261,10 @@ int main() {
             }
         }*/
 
-        if (nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST &&
-            !boostUsed) {
+        if (track.allCheckpointsFound && nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST
+        && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST
+        && abs(nextAngle) < MAX_ANGLE_ALLOWED_BOOST
+        && !boostUsed) {
             cout << target.x << " " << target.y << " BOOST" << endl;
             boostUsed = true;
         } else {
