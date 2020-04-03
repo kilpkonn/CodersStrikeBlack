@@ -18,10 +18,9 @@ using namespace std;
 struct Point2D {
     int x, y;
 
-    Point2D(int x_, int y_) {
-        x = x_;
-        y = y_;
-    }
+    Point2D() = default;
+
+    Point2D(int x, int y) : x(x), y(y) {}
 
     bool operator==(const Point2D &p) const {
         return x == p.x && y == p.y;
@@ -29,6 +28,17 @@ struct Point2D {
 
     bool operator!=(const Point2D &p) const {
         return x != p.x || y != p.y;
+    }
+};
+
+struct Ship2D {
+    int vx, vy, angle, cpId;
+    Point2D pos;
+
+    Ship2D() = default;
+
+    Ship2D(int x, int y, int vx, int vy, int angle, int cpId) : vx(vx), vy(vy), angle(angle), cpId(cpId) {
+        pos = Point2D(x, y);
     }
 };
 
@@ -87,10 +97,8 @@ public:
         return -1;
     }
 
-    Point2D getNextCp(Point2D &cp) {
-        int idx = getCPIndex(cp);
-        if (idx < 0) return cp;
-        return checkpoints[(idx + 1) % checkpoints.size()];
+    Point2D getCp(int index) {
+        return checkpoints[index];
     }
 
     double calcOptimalAngle(int distance, double nextAngle) {
@@ -148,130 +156,51 @@ bool opponentClose(int x, int y, int opponentX, int opponentY) {
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
 int main() {
-    bool boostUsed = false;
+    Point2D cp;
+    string thrust;
+
     Track track;
+
+    int lapsCount;
+    int checkpointsCount;
+    cin >> lapsCount >> checkpointsCount;
+    int cX, cY;
+    for (int i = 0; i < checkpointsCount;i++) {
+        cin >> cX >> cY;
+        track.onNewCheckpoint(Point2D(cX, cY));
+    }
+
+    Ship2D ship1, ship2, opponent1, opponent2;
+
     // game loop
     while (1) {
-        int x; // x position of your pod
-        int y; // y position of your pod
-        int nextCheckpointX; // x position of the next check point
-        int nextCheckpointY;// y position of the next check point
-        int nextCheckpointDist;
-        int nextCheckpointAngle;
+        int x, y, vx, vy, angle, cpId;
+        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        ship1 = Ship2D(x, y, vx, vy, angle, cpId);
+        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        ship2 = Ship2D(x, y, vx, vy, angle, cpId);
+        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        opponent1 = Ship2D(x, y, vx, vy, angle, cpId);
+        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        opponent2 = Ship2D(x, y, vx, vy, angle, cpId);
 
-        int opponentX;
-        int opponentY;
+        thrust = to_string(MAX_THRUST);
 
-        cin >> x >> y >> nextCheckpointX >> nextCheckpointY >> nextCheckpointDist >> nextCheckpointAngle;
-        cin >> opponentX >> opponentY;
-
-        Point2D currentCP = Point2D(nextCheckpointX, nextCheckpointY);
-        Point2D shipLoc = Point2D(x, y);
-        Point2D target = Point2D(nextCheckpointX, nextCheckpointY);
-
-        track.onNewCheckpoint(currentCP);
-        double nextAngle = track.angleToNextCp(shipLoc, currentCP);
-
-        string thrust = to_string(MAX_THRUST);
-
-        cerr << "Dist: " << nextCheckpointDist << " next angle: " << nextAngle;
-        bool ram = canRam(x, y, nextCheckpointX, nextCheckpointY, opponentX, opponentY, nextCheckpointAngle);
-        //cerr << " can ram: " << &canRam;
-
-        /*if (nextCheckpointDist < 2000) {
-            if (nextAngle * nextCheckpointAngle > 0 || (nextCheckpointDist < 1000 && abs(nextCheckpointAngle) < 30)) {
-                // Both on same side
-                target = track.getNextCp(currentCP);
-            } else if (abs(nextCheckpointAngle) > 45) {
-                thrust = "5";
-            }
-
-            if (abs(nextAngle) > 130 && nextCheckpointDist < 1000) {
-                thrust = "5";
-            }
-        } else {
-            if (nextCheckpointDist > 3000) {
-                target = Point2D()
-            }
+        cerr << ship1.angle << endl;
+        /*if (abs(ship1.angle) > 80) {
+            thrust = "10";
         }*/
+        cp = track.getCp(ship1.cpId);
+        cout << cp.x <<  " "<< cp.y << " " << thrust << endl;
 
 
-        if (track.allCheckpointsFound) {
-            double angle = track.calcOptimalAngle(nextCheckpointDist, nextAngle);
-            cerr << "Smart angle: " << angle << endl;
-            //if (abs(angle) < 160) {
-                target = track.calcOptimalTarget(shipLoc, currentCP, angle);
-            //}
-
-            if (nextCheckpointAngle > 65 ) {
-                cerr << "A" << endl;
-                thrust = "10";
-            }
-            if (abs(nextAngle) > 150 && nextCheckpointDist < 1200) {
-                cerr << "B" << endl;
-                thrust = "10";
-            }
-
-            // Hax
-            if (abs(currentCP.x - 10565) < 150 &&  abs(currentCP.y - 5973) < 150) {
-                cerr << "XD" << endl;
-                target = Point2D(11350, 6000);
-            } else if (abs(currentCP.x - 13116) < 150 &&  abs(currentCP.y - 2317) < 150) {
-                target = Point2D(12700, 2850);
-            } else if (abs(currentCP.x - 7347) < 150 &&  abs(currentCP.y - 4943) < 150) {
-                target = Point2D(6600, 3700);
-            } else if (abs(currentCP.x - 12920) < 150 &&  abs(currentCP.y -7241) < 150) {
-                target = Point2D(12500, 6700);
-            } else if (abs(currentCP.x - 6300) < 150 &&  abs(currentCP.y -7700) < 150) {
-                target = Point2D(6300, 6700);
-            } else if (abs(currentCP.x - 5950) < 150 &&  abs(currentCP.y -4222) < 150) {
-                target = Point2D(4700, 4200);
-            } else if (abs(currentCP.x - 8700) < 150 &&  abs(currentCP.y -7440) < 150) {
-                target = Point2D(9100, 7000);
-            }
-
-        } else {
-            cerr << "CP real angle: " << nextCheckpointAngle << endl;
-            /*if (nextCheckpointAngle < 60) {
-                target = track.calcOptimalTarget(shipLoc, currentCP, nextCheckpointAngle / 1.5);
-            }*/
-
-            if (nextCheckpointDist < CHECKPOINT_RADIUS * 1.2) {
-                thrust = "5";
-            }
-            if (abs(nextCheckpointAngle) > 75) {
-                thrust = "5";
-            }
-
-            // Hax
-            if (abs(currentCP.x - 11205) < 150 &&  abs(currentCP.y - 5421) < 150) {
-                cerr << "XD" << endl;
-                target = Point2D(10200, 5200);
-            } else if (abs(currentCP.x - 6000) < 150 &&  abs(currentCP.y - 5350) < 150) {
-                cerr << "XD" << endl;
-                target = Point2D(6600, 5300);
-            }
-        }
-
-        /*if (nextCheckpointDist < CHECKPOINT_RADIUS && !ram) {
-            if (opponentClose(x, y, opponentX, opponentY)) {
-                thrust = "SHIELD";
-            } else if (!track.allCheckpointsFound) {
-                thrust = "5";
-            }
+        thrust = to_string(MAX_THRUST);
+        /*if (abs(ship2.angle) > 80) {
+            thrust = "10";
         }*/
+        cp = track.getCp(ship2.cpId);
+        cout << cp.x <<  " "<< cp.y << " " << thrust << endl;
 
-        if (track.allCheckpointsFound && nextCheckpointDist > MIN_DISTANCE_ALLOWED_BOOST
-        && abs(nextCheckpointAngle) < MAX_ANGLE_ALLOWED_BOOST
-        && abs(nextAngle) < MAX_ANGLE_ALLOWED_BOOST
-        && !boostUsed) {
-            cout << target.x << " " << target.y << " BOOST" << endl;
-            boostUsed = true;
-        } else {
-            cout << target.x << " " << target.y << " " << thrust << endl;
-        }
-        cerr << "Target: " << target.x << " - " << target.y << endl;
-        cerr << endl;
     }
 }
 
