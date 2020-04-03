@@ -32,7 +32,7 @@ struct Point2D {
 };
 
 inline double angle(const Point2D& a, const Point2D& b) {
-    return atan2(b.y - a.y, b.x - a.x) * 180 / PI;
+    return atan2(a.y - b.y, a.x - b.x) * 180 / PI;
 }
 
 inline double length(const Point2D& a, const Point2D& b) {
@@ -113,7 +113,7 @@ public:
     Point2D calcOptimalTarget(Ship2D& ship) {
         Point2D currentCP = getCp(ship.cpId);
         Point2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
-        double angle_ = angle(currentCP, ship.pos); // Reverse?
+        double angle_ = angle(ship.pos, currentCP); // Reverse?
 
         double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
         cerr << "CP angle: " << angle_ << endl;
