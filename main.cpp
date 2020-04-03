@@ -31,6 +31,14 @@ struct Point2D {
     }
 };
 
+inline double angle(const Point2D& a, const Point2D& b) {
+    return atan2(b.y - a.y, b.x - a.x) * 180 / PI;
+}
+
+inline double length(const Point2D& a, const Point2D& b) {
+    return sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
+}
+
 struct Ship2D {
     int vx, vy, angle, cpId;
     Point2D pos;
@@ -69,20 +77,9 @@ public:
      * @param currentCP
      * @return - means left, + means right
      */
-    double angleToNextCp(Point2D &ship, Point2D &currentCP) {
-        int index = getCPIndex(currentCP);
-        if (index < 0 || !allCheckpointsFound)
-            return 0;
-        Point2D *nextCpPtr = &checkpoints[(index + 1) % checkpoints.size()];
-
-        cerr << "Next CP: " << index << " (" << nextCpPtr->x << ", " << nextCpPtr->y << ")" << endl;
-
-        int dx = nextCpPtr->x - currentCP.x;
-        int dy = nextCpPtr->y - currentCP.y;
-        double pointsAngle = atan2(dy, dx) * 180 / PI;
-        double shipAngle = atan2(currentCP.y - ship.y, currentCP.x - ship.x) * 180 / PI;
-        // cerr << " angle p: " << pointsAngle << endl;
-        // cerr << " angle ship: " << shipAngle << endl;
+    double angleToNextCp(Point2D& ship, Point2D& currentCP, Point2D& nextCp) {
+        double pointsAngle = angle(currentCP, nextCp);
+        double shipAngle = angle(ship, currentCP);
         double angle = pointsAngle - shipAngle;
         if (angle > 180) angle -= 360;
         if (angle < -180) angle += 260;
@@ -113,14 +110,18 @@ public:
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "bugprone-narrowing-conversions"
 
-    Point2D calcOptimalTarget(Point2D &pos, Point2D &cp, double optimalAngle) {
-        double angle = atan2(pos.y - cp.y, pos.x - cp.x) * 180 / PI;
-        cerr << "CP angle: " << angle << endl;
+    Point2D calcOptimalTarget(Ship2D& ship) {
+        Point2D currentCP = getCp(ship.cpId);
+        Point2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
+        double angle_ = angle(currentCP, ship.pos); // Reverse?
+
+        double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
+        cerr << "CP angle: " << angle_ << endl;
         cerr << "Optimal angle: " << optimalAngle << endl;
-        double radAngle = (optimalAngle + angle) / 180 * PI;
+        double radAngle = (optimalAngle + angle_) / 180 * PI;
         cerr << "DX: " << TARGET_AHEAD_DISTANCE * cos(radAngle) << endl;
         cerr << "DY: " << TARGET_AHEAD_DISTANCE * sin(radAngle) << endl;
-        return Point2D(pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
+        return Point2D(ship.pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), ship.pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
 #pragma clang diagnostic pop
@@ -156,9 +157,6 @@ bool opponentClose(int x, int y, int opponentX, int opponentY) {
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
 int main() {
-    Point2D cp;
-    string thrust;
-
     Track track;
 
     int lapsCount;
@@ -171,6 +169,10 @@ int main() {
     }
 
     Ship2D ship1, ship2, opponent1, opponent2;
+
+    Point2D target;
+    Point2D cp;
+    string thrust;
 
     // game loop
     while (1) {
@@ -186,20 +188,16 @@ int main() {
 
         thrust = to_string(MAX_THRUST);
 
-        cerr << ship1.angle << endl;
-        /*if (abs(ship1.angle) > 80) {
-            thrust = "10";
-        }*/
-        cp = track.getCp(ship1.cpId);
-        cout << cp.x <<  " "<< cp.y << " " << thrust << endl;
+        target = track.calcOptimalTarget(ship1);
+        cout << target.x <<  " "<< target.y << " " << thrust << endl;
 
 
         thrust = to_string(MAX_THRUST);
         /*if (abs(ship2.angle) > 80) {
             thrust = "10";
         }*/
-        cp = track.getCp(ship2.cpId);
-        cout << cp.x <<  " "<< cp.y << " " << thrust << endl;
+        target = track.calcOptimalTarget(ship2);
+        cout << target.x <<  " "<< target.y << " " << thrust << endl;
 
     }
 }
