@@ -31,12 +31,18 @@ struct Point2D {
     }
 };
 
-inline double angle(const Point2D& a, const Point2D& b) {
+inline double angle(const Point2D &a, const Point2D &b) {
     return atan2(b.y - a.y, b.x - a.x) * 180 / PI;
 }
 
-inline double length(const Point2D& a, const Point2D& b) {
-    return sqrt((a.x - b.x)*(a.x - b.x) + (a.y - b.y)*(a.y - b.y));
+inline double length(const Point2D &a, const Point2D &b) {
+    return sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
+}
+
+inline double normalize_angle(double angle) {
+    if (angle > 180) angle -= 360;
+    if (angle < -180) angle += 360;
+    return angle;
 }
 
 struct Ship2D {
@@ -74,13 +80,11 @@ public:
     /**
      * @return - means left, + means right
      */
-    double angleToNextCp(Point2D& ship, Point2D& currentCP, Point2D& nextCp) {
+    double angleToNextCp(Point2D &ship, Point2D &currentCP, Point2D &nextCp) {
         double pointsAngle = angle(currentCP, nextCp);
         double shipAngle = angle(ship, currentCP);
         double angle = pointsAngle - shipAngle;
-        if (angle > 180) angle -= 360;
-        if (angle < -180) angle += 260;
-        return angle;
+        return normalize_angle(angle);
     }
 
     Point2D getCp(int index) {
@@ -93,25 +97,34 @@ public:
         distance = distance / 100 - 70;
         if (distance > 75) distance = 75;
         cerr << "Optimal angle x: " << distance << endl;
-        return -nextAngle * (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 170;
+        return -nextAngle *
+               (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 170;
     }
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "bugprone-narrowing-conversions"
 
-    Point2D calcOptimalTarget(Ship2D& ship) {
+    Point2D calcOptimalTarget(Ship2D &ship) {
         Point2D currentCP = getCp(ship.cpId);
         Point2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
         double angleToCP = angle(ship.pos, currentCP); // Reverse?
         double velocityAngle = atan2(ship.vy, ship.vx) * 180 / PI;
+        double contVelAngle = normalize_angle(angleToCP - velocityAngle);
+        double contVelAngleWeight = 1 - length(ship.pos, currentCP) / 1000;
+        if (contVelAngleWeight < 0) contVelAngleWeight = 0;
+
+        // Fix standstill
+        if (ship.vx == 0 && ship.vy == 0) contVelAngle = 0;
 
         cerr << "Velocity angle: " << velocityAngle << endl;
-        cerr << "Continious vel angle:" << angleToCP - velocityAngle << endl;
+        cerr << "Continious vel angle:" << contVelAngle << endl;
         double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
         cerr << "CP angle: " << angleToCP << endl;
         cerr << "Optimal angle: " << optimalAngle << endl;
-        double radAngle = (optimalAngle + angleToCP) / 180 * PI;
-        return Point2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle), ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
+        if (contVelAngleWeight > 0) optimalAngle /= contVelAngleWeight;
+        double radAngle = (optimalAngle + angleToCP + contVelAngle * contVelAngleWeight) / 180 * PI;
+        return Point2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
+                       ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
 #pragma clang diagnostic pop
@@ -153,7 +166,7 @@ int main() {
     int checkpointsCount;
     cin >> lapsCount >> checkpointsCount;
     int cX, cY;
-    for (int i = 0; i < checkpointsCount;i++) {
+    for (int i = 0; i < checkpointsCount; i++) {
         cin >> cX >> cY;
         track.onNewCheckpoint(Point2D(cX, cY));
     }
@@ -167,19 +180,19 @@ int main() {
     // game loop
     while (1) {
         int x, y, vx, vy, angle, cpId;
-        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        cin >> x >> y >> vx >> vy >> angle >> cpId;
         ship1 = Ship2D(x, y, vx, vy, angle, cpId);
-        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        cin >> x >> y >> vx >> vy >> angle >> cpId;
         ship2 = Ship2D(x, y, vx, vy, angle, cpId);
-        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        cin >> x >> y >> vx >> vy >> angle >> cpId;
         opponent1 = Ship2D(x, y, vx, vy, angle, cpId);
-        cin >> x >> y >> vx >> vy>> angle >> cpId;
+        cin >> x >> y >> vx >> vy >> angle >> cpId;
         opponent2 = Ship2D(x, y, vx, vy, angle, cpId);
 
         thrust = to_string(MAX_THRUST);
 
         target = track.calcOptimalTarget(ship1);
-        cout << target.x <<  " "<< target.y << " " << thrust << endl;
+        cout << target.x << " " << target.y << " " << thrust << endl;
 
 
         thrust = to_string(MAX_THRUST);
@@ -187,7 +200,7 @@ int main() {
             thrust = "10";
         }*/
         target = track.calcOptimalTarget(ship2);
-        cout << target.x <<  " "<< target.y << " " << thrust << endl;
+        cout << target.x << " " << target.y << " " << thrust << endl;
 
     }
 }
