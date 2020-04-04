@@ -32,7 +32,7 @@ struct Point2D {
 };
 
 inline double angle(const Point2D& a, const Point2D& b) {
-    return atan2(a.y - b.y, a.x - b.x) * 180 / PI;
+    return atan2(b.y - a.y, b.x - a.x) * 180 / PI;
 }
 
 inline double length(const Point2D& a, const Point2D& b) {
@@ -83,14 +83,6 @@ public:
         return angle;
     }
 
-    int getCPIndex(Point2D &cp) {
-        if (checkpoints.empty()) return -1;
-        auto itr = find_if(checkpoints.cbegin(), checkpoints.cend(), [&cp](Point2D const &ca) { return ca == cp; });
-        if (itr != checkpoints.cend())
-            return std::distance(checkpoints.cbegin(), itr);
-        return -1;
-    }
-
     Point2D getCp(int index) {
         return checkpoints[index];
     }
@@ -110,13 +102,16 @@ public:
     Point2D calcOptimalTarget(Ship2D& ship) {
         Point2D currentCP = getCp(ship.cpId);
         Point2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
-        double angle_ = angle(ship.pos, currentCP); // Reverse?
+        double angleToCP = angle(ship.pos, currentCP); // Reverse?
+        double velocityAngle = atan2(ship.vy, ship.vx) * 180 / PI;
 
+        cerr << "Velocity angle: " << velocityAngle << endl;
+        cerr << "Continious vel angle:" << angleToCP - velocityAngle << endl;
         double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
-        cerr << "CP angle: " << angle_ << endl;
+        cerr << "CP angle: " << angleToCP << endl;
         cerr << "Optimal angle: " << optimalAngle << endl;
-        double radAngle = (optimalAngle + angle_) / 180 * PI;
-        return Point2D(ship.pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), ship.pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
+        double radAngle = (optimalAngle + angleToCP) / 180 * PI;
+        return Point2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle), ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
 #pragma clang diagnostic pop
