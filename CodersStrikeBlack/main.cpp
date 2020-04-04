@@ -72,9 +72,6 @@ public:
     }
 
     /**
-     * @param x ship x
-     * @param y ship y
-     * @param currentCP
      * @return - means left, + means right
      */
     double angleToNextCp(Point2D& ship, Point2D& currentCP, Point2D& nextCp) {
@@ -119,8 +116,6 @@ public:
         cerr << "CP angle: " << angle_ << endl;
         cerr << "Optimal angle: " << optimalAngle << endl;
         double radAngle = (optimalAngle + angle_) / 180 * PI;
-        cerr << "DX: " << TARGET_AHEAD_DISTANCE * cos(radAngle) << endl;
-        cerr << "DY: " << TARGET_AHEAD_DISTANCE * sin(radAngle) << endl;
         return Point2D(ship.pos.x - TARGET_AHEAD_DISTANCE * cos(radAngle), ship.pos.y - TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
