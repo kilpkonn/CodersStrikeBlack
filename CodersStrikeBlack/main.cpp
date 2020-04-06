@@ -102,8 +102,22 @@ public:
                (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 170;
     }
 
-    double calcOptimalAngle2(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
-        return 0;
+    double calcTurnAngle(Vector2D &ship, Vector2D &currentCP, Vector2D &nextCp) {
+        double pointAngle = angle(ship, currentCP);
+        // cerr << "x" << pointAngle << endl;
+        double nextAngle = angle(currentCP, nextCp);
+        // cerr << nextAngle << endl;
+        double angle = nextAngle - pointAngle;
+        return normalize_angle(angle);
+    }
+
+    double calcOptimalAngleOffset(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
+        double x = length(pos, cp) / 150; // Map 0 - 15000 to 0 - 100
+        cerr << "x " << x << endl;
+        double turnAngle = calcTurnAngle(pos, cp, nextCP);
+        cerr << "a " << turnAngle << endl;
+        // log(x + 1) * 80 - sqrt(x) * 16
+        return (log10(x + 1) * 80 - sqrt(x) * 16) * (-turnAngle) / 400;
     }
 
 #pragma clang diagnostic push
@@ -130,7 +144,28 @@ public:
         if (contVelAngleWeight > 0) optimalAngle *= (1 - contVelAngleWeight);
         double radAngle = (optimalAngle + angleToCP + contVelAngle * contVelAngleWeight) / 180 * PI;
         return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
-                       ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
+                        ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
+    }
+
+    Vector2D calcOptimalTarget2(Ship2D &ship) {
+        Vector2D currentCP = getCp(ship.cpId);
+        Vector2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
+        double angleToCP = angle(ship.pos, currentCP); // Reverse?
+        double velocityAngle = atan2(ship.velocity.y, ship.velocity.x) * 180 / PI;
+        double contVelAngle = normalize_angle(angleToCP - velocityAngle);
+        // Fix standstill
+        if (ship.velocity.x == 0 && ship.velocity.y == 0) contVelAngle = 0;
+
+        double preferredAngle = calcOptimalAngleOffset(ship.velocity, ship.pos, currentCP, nextCP);
+
+        cerr << "Distance: " <<  length(currentCP, ship.pos) << endl;
+        cerr << "Velocity angle: " << velocityAngle << endl;
+        cerr << "Continious vel angle:" << contVelAngle << endl;
+        cerr << "CP angle: " << angleToCP << endl;
+        cerr << "Pref angle: " << preferredAngle << endl;
+        double radAngle = normalize_angle(angleToCP + (preferredAngle - contVelAngle) / 2) / 180 * PI;
+        return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
+                        ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
 #pragma clang diagnostic pop
@@ -196,17 +231,15 @@ int main() {
         cin >> x >> y >> vx >> vy >> angle >> cpId;
         opponent2 = Ship2D(x, y, vx, vy, angle, cpId);
 
+        cerr << "============== SHIP 1 ==============" << endl;
         thrust = to_string(MAX_THRUST);
-
-        target = track.calcOptimalTarget(ship1);
+        target = track.calcOptimalTarget2(ship1);
         cout << target.x << " " << target.y << " " << thrust << endl;
 
 
+        cerr << "============== SHIP 2 ==============" << endl;
         thrust = to_string(MAX_THRUST);
-        /*if (abs(ship2.angle) > 80) {
-            thrust = "10";
-        }*/
-        target = track.calcOptimalTarget(ship2);
+        target = track.calcOptimalTarget2(ship2);
         cout << target.x << " " << target.y << " " << thrust << endl;
 
     }
