@@ -57,66 +57,9 @@ struct Ship2D {
     }
 };
 
-class PID {
-public:
-    PID(double dt, double max, double min, double Kp, double Kd, double Ki) :
-            _dt(dt),
-            _max(max),
-            _min(min),
-            _Kp(Kp),
-            _Kd(Kd),
-            _Ki(Ki),
-            _pre_error(0),
-            _integral(0) {
-    }
-
-    double calculate(double target, double currentValue) {
-        // Calculate error
-        double error = target - currentValue;
-
-        // Proportional term
-        double Pout = _Kp * error;
-
-        // Integral term
-        _integral += error * _dt;
-        double Iout = _Ki * _integral;
-
-        // Derivative term
-        double derivative = (error - _pre_error) / _dt;
-        double Dout = _Kd * derivative;
-
-        // Calculate total output
-        double output = Pout + Iout + Dout;
-
-        // Restrict to max/min
-        if (output > _max)
-            output = _max;
-        else if (output < _min)
-            output = _min;
-
-        // Save error to previous error
-        _pre_error = error;
-
-        return output;
-    }
-
-private:
-    double _dt;
-    double _max;
-    double _min;
-    double _Kp;
-    double _Kd;
-    double _Ki;
-    double _pre_error;
-    double _integral;
-};
-
 class Track {
 public:
     bool allCheckpointsFound = false;
-
-    PID pid1 = PID(1, 135, -135, 0.2, 0.001, 0.02);
-    PID pid2 = PID(1, 135, -135, 0.2, 0, 0);
 
     void addNewCheckpoint(Vector2D point) {
         /*for (int i = 0; i < checkpoints.size(); i++) {
@@ -135,28 +78,8 @@ public:
         }
     }
 
-    /**
-     * @return - means left, + means right
-     */
-    double angleToNextCp(Vector2D &ship, Vector2D &currentCP, Vector2D &nextCp) {
-        double pointsAngle = angle(currentCP, nextCp);
-        double shipAngle = angle(ship, currentCP);
-        double angle = pointsAngle - shipAngle;
-        return normalize_angle(angle);
-    }
-
     Vector2D getCp(int index) {
         return checkpoints[index];
-    }
-
-    double calcOptimalAngle(int distance, double nextAngle) {
-        // x*x*x/8000 - x*x/60 + x/6+ 30
-        if (abs(nextAngle) > 160) nextAngle = nextAngle > 0 ? 160 : -160;
-        distance = distance / 100 - 70;
-        if (distance > 75) distance = 75;
-        cerr << "Optimal angle x: " << distance << endl;
-        return -nextAngle *
-               (distance * distance * distance / 6000.0 - distance * distance / 60.0 + distance / 6.0 + 30) / 170;
     }
 
     double calcTurnAngle(Vector2D &ship, Vector2D &currentCP, Vector2D &nextCp) {
@@ -181,30 +104,6 @@ public:
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "bugprone-narrowing-conversions"
 
-    Vector2D calcOptimalTarget(Ship2D &ship) {
-        Vector2D currentCP = getCp(ship.cpId);
-        Vector2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
-        double angleToCP = angle(ship.pos, currentCP); // Reverse?
-        double velocityAngle = atan2(ship.velocity.y, ship.velocity.x) * 180 / PI;
-        double contVelAngle = normalize_angle(angleToCP - velocityAngle);
-        double contVelAngleWeight = 1 - length(ship.pos, currentCP) / 2500;
-        if (contVelAngleWeight < 0) contVelAngleWeight = 0;
-
-        // Fix standstill
-        if (ship.velocity.x == 0 && ship.velocity.y == 0) contVelAngle = 0;
-
-        cerr << "Distance: " << length(currentCP, ship.pos) << endl;
-        cerr << "Velocity angle: " << velocityAngle << endl;
-        cerr << "Continious vel angle:" << contVelAngle << endl;
-        double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
-        cerr << "CP angle: " << angleToCP << endl;
-        cerr << "Optimal angle: " << optimalAngle << endl;
-        if (contVelAngleWeight > 0) optimalAngle *= (1 - contVelAngleWeight);
-        double radAngle = (optimalAngle + angleToCP + contVelAngle * contVelAngleWeight) / 180 * PI;
-        return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
-                        ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
-    }
-
     Vector2D calcOptimalTarget2(Ship2D &ship, bool ship1) {
         Vector2D currentCP = getCp(ship.cpId);
         Vector2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
@@ -225,16 +124,7 @@ public:
         cerr << "Target angle: " << targetAngle << endl;
         double error = normalize_angle(targetAngle - contVelAngle); // TODO: pid
         cerr << "Error: " << error << endl;
-        double target = normalize_angle(targetAngle);
-        if (contVelAngle != 0) {
-            if (ship1) {
-                error = pid1.calculate(0, contVelAngle);
-            } else {
-                error = pid2.calculate(0, contVelAngle);
-            }
-            cerr << "PID err: " << error << endl;
-            target = normalize_angle(target + error);
-        }
+        double target = normalize_angle(targetAngle + error * 0.2);
         cerr << "PID " << target << endl;
         double radAngle = target / 180 * PI;
         return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
@@ -246,24 +136,6 @@ public:
 private:
     vector<Vector2D> checkpoints;
 };
-
-bool canRam(int x, int y, int checkX, int checkY, int opponentX, int opponentY, int angle) {
-    bool opponentInFront = abs(opponentX - checkX) < abs(x - checkX) && abs(opponentY - checkY) < abs(y - checkY);
-    cerr << " In front:" << opponentInFront;
-    bool opponentClose = abs(opponentY - y) < 600 && abs(opponentX - x) < 600;
-    cerr << " close: " << opponentClose;
-    bool opponentCloseToCheck =
-            abs(opponentY - checkY) < CHECKPOINT_RADIUS && abs(opponentX - checkX) < CHECKPOINT_RADIUS;
-    cerr << " close to check: " << opponentCloseToCheck;
-    cerr << " angle: " << angle << endl;
-    return opponentInFront && opponentClose && opponentCloseToCheck && abs(angle) < 30;
-}
-
-bool opponentClose(int x, int y, int opponentX, int opponentY) {
-    return sqrt((x - opponentX) * (x - opponentX) + (y - opponentY) * (y - opponentY)) <
-           SHIP_RADIUS * 2 + CLOSE_PADDING;
-}
-
 
 /**
  * This code automatically collects game data in an infinite loop.
