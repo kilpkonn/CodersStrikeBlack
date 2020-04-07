@@ -57,9 +57,66 @@ struct Ship2D {
     }
 };
 
+class PID {
+public:
+    PID(double dt, double max, double min, double Kp, double Kd, double Ki) :
+            _dt(dt),
+            _max(max),
+            _min(min),
+            _Kp(Kp),
+            _Kd(Kd),
+            _Ki(Ki),
+            _pre_error(0),
+            _integral(0) {
+    }
+
+    double calculate(double target, double currentValue) {
+        // Calculate error
+        double error = target - currentValue;
+
+        // Proportional term
+        double Pout = _Kp * error;
+
+        // Integral term
+        _integral += error * _dt;
+        double Iout = _Ki * _integral;
+
+        // Derivative term
+        double derivative = (error - _pre_error) / _dt;
+        double Dout = _Kd * derivative;
+
+        // Calculate total output
+        double output = Pout + Iout + Dout;
+
+        // Restrict to max/min
+        if (output > _max)
+            output = _max;
+        else if (output < _min)
+            output = _min;
+
+        // Save error to previous error
+        _pre_error = error;
+
+        return output;
+    }
+
+private:
+    double _dt;
+    double _max;
+    double _min;
+    double _Kp;
+    double _Kd;
+    double _Ki;
+    double _pre_error;
+    double _integral;
+};
+
 class Track {
 public:
     bool allCheckpointsFound = false;
+
+    PID pid1 = PID(1, 135, -135, 0.2, 0.001, 0.02);
+    PID pid2 = PID(1, 135, -135, 0.2, 0, 0);
 
     void addNewCheckpoint(Vector2D point) {
         /*for (int i = 0; i < checkpoints.size(); i++) {
@@ -117,7 +174,8 @@ public:
         double turnAngle = calcTurnAngle(pos, cp, nextCP);
         cerr << "a " << turnAngle << endl;
         // log(x + 1) * 80 - sqrt(x) * 16
-        return (log10(x + 1) * 80 - sqrt(x) * 16) * (-turnAngle) / 400;
+        // log((x -10)/3 + 4) * 75 - sqrt((x)/2) * 16
+        return -(log10((x - 10) / 3 + 4) * 75 - sqrt((x) / 2) * 16) * turnAngle / 100;
     }
 
 #pragma clang diagnostic push
@@ -135,7 +193,7 @@ public:
         // Fix standstill
         if (ship.velocity.x == 0 && ship.velocity.y == 0) contVelAngle = 0;
 
-        cerr << "Distance: " <<  length(currentCP, ship.pos) << endl;
+        cerr << "Distance: " << length(currentCP, ship.pos) << endl;
         cerr << "Velocity angle: " << velocityAngle << endl;
         cerr << "Continious vel angle:" << contVelAngle << endl;
         double optimalAngle = calcOptimalAngle(length(ship.pos, currentCP), angleToNextCp(ship.pos, currentCP, nextCP));
@@ -147,7 +205,7 @@ public:
                         ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
 
-    Vector2D calcOptimalTarget2(Ship2D &ship) {
+    Vector2D calcOptimalTarget2(Ship2D &ship, bool ship1) {
         Vector2D currentCP = getCp(ship.cpId);
         Vector2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
         double angleToCP = angle(ship.pos, currentCP); // Reverse?
@@ -156,14 +214,29 @@ public:
         // Fix standstill
         if (ship.velocity.x == 0 && ship.velocity.y == 0) contVelAngle = 0;
 
-        double preferredAngle = calcOptimalAngleOffset(ship.velocity, ship.pos, currentCP, nextCP);
+        double preferredAngleOffset = calcOptimalAngleOffset(ship.velocity, ship.pos, currentCP, nextCP);
 
-        cerr << "Distance: " <<  length(currentCP, ship.pos) << endl;
+        cerr << "Distance: " << length(currentCP, ship.pos) << endl;
         cerr << "Velocity angle: " << velocityAngle << endl;
         cerr << "Continious vel angle:" << contVelAngle << endl;
         cerr << "CP angle: " << angleToCP << endl;
-        cerr << "Pref angle: " << preferredAngle << endl;
-        double radAngle = normalize_angle(angleToCP + (preferredAngle - contVelAngle) / 2) / 180 * PI;
+        cerr << "Pref angle offset: " << preferredAngleOffset << endl;
+        double targetAngle = normalize_angle(angleToCP + preferredAngleOffset);
+        cerr << "Target angle: " << targetAngle << endl;
+        double error = normalize_angle(targetAngle - contVelAngle); // TODO: pid
+        cerr << "Error: " << error << endl;
+        double target = normalize_angle(targetAngle);
+        if (contVelAngle != 0) {
+            if (ship1) {
+                error = pid1.calculate(0, contVelAngle);
+            } else {
+                error = pid2.calculate(0, contVelAngle);
+            }
+            cerr << "PID err: " << error << endl;
+            target = normalize_angle(target + error);
+        }
+        cerr << "PID " << target << endl;
+        double radAngle = target / 180 * PI;
         return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
                         ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
     }
@@ -233,13 +306,13 @@ int main() {
 
         cerr << "============== SHIP 1 ==============" << endl;
         thrust = to_string(MAX_THRUST);
-        target = track.calcOptimalTarget2(ship1);
+        target = track.calcOptimalTarget2(ship1, true);
         cout << target.x << " " << target.y << " " << thrust << endl;
 
 
         cerr << "============== SHIP 2 ==============" << endl;
         thrust = to_string(MAX_THRUST);
-        target = track.calcOptimalTarget2(ship2);
+        target = track.calcOptimalTarget2(ship2, false);
         cout << target.x << " " << target.y << " " << thrust << endl;
 
     }
