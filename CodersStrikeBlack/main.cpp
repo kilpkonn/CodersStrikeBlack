@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 
 #define CHECKPOINT_RADIUS 600
 #define MAX_THRUST 100
@@ -39,6 +40,10 @@ inline double length(const Vector2D &a, const Vector2D &b) {
     return sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
 }
 
+inline double length(const Vector2D &a) {
+    return sqrt(a.x * a.x + a.y * a.y);
+}
+
 inline double normalize_angle(double angle) {
     if (angle > 180) angle -= 360;
     if (angle < -180) angle += 360;
@@ -60,6 +65,7 @@ struct Ship2D {
 class Track {
 public:
     bool allCheckpointsFound = false;
+    string podThrust = "100";
 
     void addNewCheckpoint(Vector2D point) {
         /*for (int i = 0; i < checkpoints.size(); i++) {
@@ -78,8 +84,8 @@ public:
         }
     }
 
-    Vector2D getCp(int index) {
-        return checkpoints[index];
+    Vector2D getCp(unsigned index) {
+        return checkpoints[index % checkpoints.size()];
     }
 
     double calcTurnAngle(Vector2D &ship, Vector2D &currentCP, Vector2D &nextCp) {
@@ -91,23 +97,28 @@ public:
         return normalize_angle(angle);
     }
 
-    double calcOptimalAngleOffset(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
-        double x = length(pos, cp) / 150; // Map 0 - 15000 to 0 - 100
-        cerr << "x " << x << endl;
-        double turnAngle = calcTurnAngle(pos, cp, nextCP);
-        cerr << "a " << turnAngle << endl;
-        // log(x + 1) * 80 - sqrt(x) * 16
-        // log((x -10)/3 + 4) * 75 - sqrt((x)/2) * 16
-        return -(log10((x - 10) / 3 + 4) * 75 - sqrt((x) / 2) * 16) * turnAngle / 100;
+    double calcOptimalCpAngle(Ship2D &ship, Vector2D &cp, Vector2D &nextCp) {
+        Vector2D medianPoint = Vector2D((ship.pos.x + nextCp.x), (ship.pos.y + nextCp.y) / 2);
+        double radAngleFromCp = angle(cp, medianPoint) / 180 * PI;
+        Vector2D newCp = Vector2D(cp.x + CHECKPOINT_RADIUS * cos(radAngleFromCp),
+                                  cp.y + CHECKPOINT_RADIUS * radAngleFromCp);
+        return angle(ship.pos, newCp);
     }
 
-#pragma clang diagnostic push
-#pragma ide diagnostic ignored "bugprone-narrowing-conversions"
+    double calcOptimalAngleOffset(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
+        double x = length(pos, cp) / 150; // Map 0 - 15000 to 0 - 100
+        // cerr << "x " << x << endl;
+        double turnAngle = calcTurnAngle(pos, cp, nextCP);
+        // cerr << "a " << turnAngle << endl;
+        // log(x + 1) * 80 - sqrt(x) * 16
+        // log((x -10)/3 + 4) * 75 - sqrt((x)/2) * 16
+        return -(log10((x - 10) / 3 + 4) * 70 - sqrt((x + 2) / 2) * 16 + x / 10) * turnAngle / 100;
+    }
 
-    Vector2D calcOptimalTarget2(Ship2D &ship, bool ship1) {
+    Vector2D calcOptimalTarget2(Ship2D &ship, long dt, bool ship1) {
         Vector2D currentCP = getCp(ship.cpId);
-        Vector2D nextCP = getCp((ship.cpId + 1) % checkpoints.size());
-        double angleToCP = angle(ship.pos, currentCP); // Reverse?
+        Vector2D nextCP = getCp(ship.cpId + 1);
+        double angleToCP = calcOptimalCpAngle(ship, currentCP, nextCP);
         double velocityAngle = atan2(ship.velocity.y, ship.velocity.x) * 180 / PI;
         double contVelAngle = normalize_angle(angleToCP - velocityAngle);
         // Fix standstill
@@ -122,16 +133,46 @@ public:
         cerr << "Pref angle offset: " << preferredAngleOffset << endl;
         double targetAngle = normalize_angle(angleToCP + preferredAngleOffset);
         cerr << "Target angle: " << targetAngle << endl;
-        double error = normalize_angle(targetAngle - contVelAngle); // TODO: pid
+        double error = normalize_angle(targetAngle - velocityAngle); // TODO: pid
         cerr << "Error: " << error << endl;
-        double target = normalize_angle(targetAngle + error * 0.2);
-        cerr << "PID " << target << endl;
-        double radAngle = target / 180 * PI;
-        return Vector2D(ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle),
-                        ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle));
+        double target = normalize_angle(targetAngle + error * 0.5);
+        cerr << "Corrected target:  " << target << endl;
+
+        if (contVelAngle == 0 || abs(error) > 25) {
+            target = targetAngle;
+        }
+
+        Vector2D newPos = Vector2D(ship.pos.x + ship.velocity.x,
+                                   ship.pos.y + ship.velocity.y); // Work on this
+
+        // cerr << "New pos: " << newPos.x << " - " << newPos.y << endl;
+        // cerr << ship.pos.x << " - " << ship.pos.y << endl;
+
+        double newAngleToCP = angle(newPos, currentCP);
+        double newPreferredOffset = calcOptimalAngleOffset(ship.velocity, newPos, currentCP, nextCP);
+        double newTargetAngle = normalize_angle(newAngleToCP + newPreferredOffset);
+
+        cerr << "New target angle: " << newTargetAngle << endl;
+
+        cerr << "Turn angle: " << newTargetAngle - velocityAngle << endl;
+
+        if (contVelAngle != 0
+            && abs(normalize_angle((newTargetAngle + target) / 2 - velocityAngle)) > 90
+            && abs(normalize_angle(newTargetAngle + target) / 2 - velocityAngle) < 135 // Reverse lol
+            && length(ship.velocity) > 150) { // speed
+
+            podThrust = "0";
+        } else {
+            podThrust = to_string(MAX_THRUST);
+        }
+        double combinedTargetAngle = (target + newTargetAngle) / 2;
+        cerr << "Combined target angle: " << combinedTargetAngle << endl;
+
+        double radAngle = combinedTargetAngle / 180 * PI;
+        return {(int) (ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle)),
+                (int) (ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle))};
     }
 
-#pragma clang diagnostic pop
 
 private:
     vector<Vector2D> checkpoints;
@@ -162,8 +203,10 @@ int main() {
     Vector2D target;
     Vector2D cp;
     string thrust;
+    auto lastUpdateTime = std::chrono::steady_clock::now();
 
     int x, y, vx, vy, angle, cpId;
+    long dt;
 
     // game loop
     while (1) {
@@ -176,17 +219,20 @@ int main() {
         cin >> x >> y >> vx >> vy >> angle >> cpId;
         opponent2 = Ship2D(x, y, vx, vy, angle, cpId);
 
+        dt = std::chrono::duration_cast<std::chrono::microseconds>(
+                std::chrono::steady_clock::now() - lastUpdateTime).count();
+        // cerr << "DT" << dt<<endl;
+
         cerr << "============== SHIP 1 ==============" << endl;
-        thrust = to_string(MAX_THRUST);
-        target = track.calcOptimalTarget2(ship1, true);
-        cout << target.x << " " << target.y << " " << thrust << endl;
+        target = track.calcOptimalTarget2(ship1, dt, true);
+        cout << target.x << " " << target.y << " " << track.podThrust << endl;
 
 
         cerr << "============== SHIP 2 ==============" << endl;
-        thrust = to_string(MAX_THRUST);
-        target = track.calcOptimalTarget2(ship2, false);
-        cout << target.x << " " << target.y << " " << thrust << endl;
+        target = track.calcOptimalTarget2(ship2, dt, false);
+        cout << target.x << " " << target.y << " " << track.podThrust << endl;
 
+        lastUpdateTime = std::chrono::steady_clock::now();
     }
 }
 
