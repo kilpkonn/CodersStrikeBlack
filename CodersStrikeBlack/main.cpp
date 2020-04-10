@@ -11,7 +11,7 @@
 #define SHIELD_COOL_DOWN 3
 #define MAX_ANGLE_ALLOWED_BOOST 10
 #define MIN_DISTANCE_ALLOWED_BOOST 6000
-#define SHIP_RADIUS 400
+#define POD_RADIUS 400
 #define CLOSE_PADDING 100
 #define PI 3.14159265
 #define TARGET_AHEAD_DISTANCE 5000
@@ -36,6 +36,10 @@ struct Vector2D {
 
 inline double angle(const Vector2D &a, const Vector2D &b) {
     return atan2(b.y - a.y, b.x - a.x) * 180 / PI;
+}
+
+inline double angle(const Vector2D &a) {
+    return atan2(a.y, a.x) * 180 / PI;
 }
 
 inline double length(const Vector2D &a, const Vector2D &b) {
@@ -99,12 +103,11 @@ public:
         return normalize_angle(angle);
     }
 
-    double calcOptimalCpAngle(Ship2D &ship, Vector2D &cp, Vector2D &nextCp) {
-        Vector2D medianPoint = Vector2D((ship.pos.x + nextCp.x), (ship.pos.y + nextCp.y) / 2);
+    Vector2D calcOptimalCpPos(Ship2D* ship, Vector2D &cp, Vector2D &nextCp) {
+        Vector2D medianPoint = Vector2D((ship->pos.x + nextCp.x), (ship->pos.y + nextCp.y) / 2);
         double radAngleFromCp = angle(cp, medianPoint) / 180 * PI;
-        Vector2D newCp = Vector2D(cp.x + CHECKPOINT_RADIUS * cos(radAngleFromCp),
-                                  cp.y + CHECKPOINT_RADIUS * radAngleFromCp);
-        return angle(ship.pos, newCp);
+        return {(int )(cp.x + CHECKPOINT_RADIUS * 1 * cos(radAngleFromCp)),
+                (int)(cp.y + CHECKPOINT_RADIUS * 1 * radAngleFromCp)};
     }
 
     double calcOptimalAngleOffset(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
@@ -117,28 +120,39 @@ public:
         // return -(log10((x - 10) / 3 + 4) * 70 - sqrt((x + 2) / 2) * 16 + x / 10) * turnAngle / 50;
 
         // 20 * cos(log(x + 36) * 8) - x/18
-        return 20 * cos(log10(x + 36) * 8) - x / 18 * turnAngle / 100;
+        // return 20 * cos(log10(x + 36) * 8) - x / 18 * turnAngle / 100;
+
+        // (x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30
+        return -((x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30) * turnAngle / 200;
     }
 
     void plan() {
+        // TODO: Simulation for some AI
         cerr << "============== SHIP 1 ==============" << endl;
-        calcOptimalTarget(pod1);
+        pod1.shieldCoolDown--;
+        calcOptimalTarget(&pod1);
+        evaluateShield(&pod1);
+        evaluateBoost(&pod1);
         cerr << "============== SHIP 2 ==============" << endl;
-        calcOptimalTarget(pod2);
+        pod2.shieldCoolDown--;
+        calcOptimalTarget(&pod2);
+        evaluateShield(&pod2);
+        evaluateBoost(&pod2);
     }
 
-    void calcOptimalTarget(Ship2D &ship) {
-        Vector2D currentCP = getCp(ship.cpId);
-        Vector2D nextCP = getCp(ship.cpId + 1);
-        double angleToCP = calcOptimalCpAngle(ship, currentCP, nextCP);
-        double velocityAngle = atan2(ship.velocity.y, ship.velocity.x) * 180 / PI;
+    void calcOptimalTarget(Ship2D* ship) {
+        Vector2D nextCP = getCp(ship->cpId + 1);
+        Vector2D tmpCP =  getCp(ship->cpId);
+        Vector2D currentCP = calcOptimalCpPos(ship, tmpCP, nextCP);
+        double angleToCP = angle(ship->pos, currentCP);
+        double velocityAngle = atan2(ship->velocity.y, ship->velocity.x) * 180 / PI;
         double contVelAngle = normalize_angle(angleToCP - velocityAngle);
         // Fix standstill
-        if (ship.velocity.x == 0 && ship.velocity.y == 0) contVelAngle = 0;
+        if (ship->velocity.x == 0 && ship->velocity.y == 0) contVelAngle = 0;
 
-        double preferredAngleOffset = calcOptimalAngleOffset(ship.velocity, ship.pos, currentCP, nextCP);
+        double preferredAngleOffset = calcOptimalAngleOffset(ship->velocity, ship->pos, currentCP, nextCP);
 
-        cerr << "Distance: " << length(currentCP, ship.pos) << endl;
+        cerr << "Distance: " << length(currentCP, ship->pos) << endl;
         cerr << "Velocity angle: " << velocityAngle << endl;
         cerr << "Continuous vel angle:" << contVelAngle << endl;
         cerr << "CP angle: " << angleToCP << endl;
@@ -147,18 +161,18 @@ public:
         cerr << "Target angle: " << targetAngle << endl;
         double error = normalize_angle(targetAngle - velocityAngle); // TODO: pid
         cerr << "Error: " << error << endl;
-        double target = normalize_angle(targetAngle + error * 0.5);
+        double target = normalize_angle(targetAngle + error * 0.2);
         cerr << "Corrected target:  " << target << endl;
 
         if (contVelAngle == 0 || abs(error) > 25) {
             target = targetAngle;
         }
 
-        Vector2D newPos = Vector2D(ship.pos.x + ship.velocity.x,
-                                   ship.pos.y + ship.velocity.y); // Work on this
+        Vector2D newPos = Vector2D(ship->pos.x + ship->velocity.x,
+                                   ship->pos.y + ship->velocity.y); // Work on this
 
         double newAngleToCP = angle(newPos, currentCP);
-        double newPreferredOffset = calcOptimalAngleOffset(ship.velocity, newPos, currentCP, nextCP);
+        double newPreferredOffset = calcOptimalAngleOffset(ship->velocity, newPos, currentCP, nextCP);
         double newTargetAngle = normalize_angle(newAngleToCP + newPreferredOffset);
 
         cerr << "New target angle: " << newTargetAngle << endl;
@@ -167,22 +181,50 @@ public:
         if (contVelAngle != 0
             && abs(normalize_angle((newTargetAngle + target) / 2 - velocityAngle)) > 90
             && abs(normalize_angle(newTargetAngle + target) / 2 - velocityAngle) < 135 // Reverse lol
-            && length(ship.velocity) > 150
-            && length(ship.pos, currentCP) < 2500) { // speed
+            && length(ship->velocity) > 150
+            && length(ship->pos, currentCP) < 2500) { // speed
 
-            ship.thrust = 0;
+            ship->thrust = 0;
         } else {
-            ship.thrust = MAX_THRUST;
+            ship->thrust = MAX_THRUST;
         }
         double combinedTargetAngle = (target + newTargetAngle) / 2;
         cerr << "Combined target angle: " << combinedTargetAngle << endl;
 
         double radAngle = combinedTargetAngle / 180 * PI;
-        ship.target= {(int) (ship.pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle)),
-                (int) (ship.pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle))};
+        ship->target= {(int) (ship->pos.x + TARGET_AHEAD_DISTANCE * cos(radAngle)),
+                (int) (ship->pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle))};
     }
 
+    void evaluateShield(Ship2D* ship) {
+        Vector2D newPos = Vector2D(ship->pos.x + ship->velocity.x,
+                                   ship->pos.y + ship->velocity.y);
+        Vector2D newOpponet1 = Vector2D(opponent1.pos.x + opponent1.velocity.x,
+                                        opponent1.pos.y + opponent1.velocity.y);
+        Vector2D newOpponet2 = Vector2D(opponent2.pos.x + opponent2.velocity.x,
+                                        opponent2.pos.y + opponent2.velocity.y);
 
+        if (length(newPos, newOpponet1) < POD_RADIUS * 2.2) {
+            if (abs(angle(ship->velocity) - angle(newOpponet1)) > 45) {
+                ship->shieldCoolDown = SHIELD_COOL_DOWN;
+            }
+        }
+
+        if (length(newPos, newOpponet2) < POD_RADIUS * 2.2) {
+            if (abs(angle(ship->velocity) - angle(newOpponet2)) > 45) {
+                ship->shieldCoolDown = SHIELD_COOL_DOWN;
+            }
+        }
+    }
+
+    void evaluateBoost(Ship2D* ship) {
+        if (ship->boostUsed) return;
+
+        if (length(ship->pos, getCp(ship->cpId)) > 8000) {
+            ship->thrust = BOOST_THRUST;
+            ship->boostUsed = true;
+        }
+    }
 
 
 private:
