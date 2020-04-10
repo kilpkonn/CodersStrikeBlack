@@ -112,7 +112,10 @@ public:
         // cerr << "a " << turnAngle << endl;
         // log(x + 1) * 80 - sqrt(x) * 16
         // log((x -10)/3 + 4) * 75 - sqrt((x)/2) * 16
-        return -(log10((x - 10) / 3 + 4) * 70 - sqrt((x + 2) / 2) * 16 + x / 10) * turnAngle / 100;
+        // return -(log10((x - 10) / 3 + 4) * 70 - sqrt((x + 2) / 2) * 16 + x / 10) * turnAngle / 50;
+
+        // 20 * cos(log(x + 36) * 8) - x/18
+        return 20 * cos(log10(x + 36) * 8) - x/18 * turnAngle / 100;
     }
 
     Vector2D calcOptimalTarget2(Ship2D &ship, long dt, bool ship1) {
@@ -159,7 +162,8 @@ public:
         if (contVelAngle != 0
             && abs(normalize_angle((newTargetAngle + target) / 2 - velocityAngle)) > 90
             && abs(normalize_angle(newTargetAngle + target) / 2 - velocityAngle) < 135 // Reverse lol
-            && length(ship.velocity) > 150) { // speed
+            && length(ship.velocity) > 150
+            && length(ship.pos, currentCP) < 2500) { // speed
 
             podThrust = "0";
         } else {
