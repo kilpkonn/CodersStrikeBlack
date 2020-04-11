@@ -15,6 +15,7 @@
 #define PI 3.14159265
 #define TARGET_AHEAD_DISTANCE 5000
 #define DRAG 0.85
+#define MAX_CP_DISTANCE 16000
 
 #define SIMULATION_CHILD_COUNT 6
 #define SIMULATION_DEPTH 6
@@ -291,23 +292,50 @@ class SimulationNode {
 public:
     Track *track;
     Ship2D pod1, pod2, opponent1, opponent2;
+    double score = 0;
 
-    SimulationNode(Track *track) : track(track) {}
+    SimulationNode() {}
+
+    SimulationNode(Track *track,
+                   const Ship2D &pod1, const Ship2D &pod2, const Ship2D &opponent1, const Ship2D &opponent2) :
+            track(track), pod1(pod1), pod2(pod2), opponent1(opponent1), opponent2(opponent2) {}
 
     SimulationNode evaluate(int depth = SIMULATION_DEPTH) {
+        if (depth <= 0) {
+            score = getNodeScore(this);
+            return *this;
+        }
+
         double pod1BaseAngle = track->calcOptimalTargetAngle(&pod1);
         double pod2BaseAngle = track->calcOptimalTargetAngle(&pod2);
 
         double pod1Angle;
         double pod2Angle;
 
-        for (short d = -SIMULATION_ANGLE_DIFF / 2;
-             d < SIMULATION_ANGLE_DIFF / 2; d += SIMULATION_ANGLE_DIFF / SIMULATION_CHILD_COUNT) {
-            double pod1Angle = pod1BaseAngle + d;
-            double pod2Angle = pod2BaseAngle + d;
-            Ship2D newPod1 = calculateNewPodLocation(&pod1, pod1Angle);
-            Ship2D newPod2 = calculateNewPodLocation(&pod2, pod2Angle);
+        SimulationNode node, best;
+        double bestScore = -1; // Negative start?
+
+        for (short d1 = -SIMULATION_ANGLE_DIFF / 2;
+             d1 < SIMULATION_ANGLE_DIFF / 2; d1 += SIMULATION_ANGLE_DIFF / SIMULATION_CHILD_COUNT) {
+            for (short d2 = -SIMULATION_ANGLE_DIFF / 2;
+                 d2 < SIMULATION_ANGLE_DIFF / 2; d2 += SIMULATION_ANGLE_DIFF / SIMULATION_CHILD_COUNT) {
+
+                double pod1Angle = pod1BaseAngle + d1;
+                double pod2Angle = pod2BaseAngle + d2;
+                Ship2D newPod1 = calculateNewPodLocation(&pod1, pod1Angle);
+                Ship2D newPod2 = calculateNewPodLocation(&pod2, pod2Angle);
+                // TODO: Opponents and collisions
+
+                node = SimulationNode(track, newPod1, newPod2, opponent1, opponent2).evaluate(depth - 1);
+
+                if (node.score > score) {
+                    score = node.score;
+                    best = node; // Unnecessary?
+                }
+            }
         }
+        cerr << "Best score: " << best.score << endl;
+        return best;
     }
 
 private:
@@ -321,6 +349,23 @@ private:
         return Ship2D(newPos, newVelocity, newAngle, newCpId, pod->thrust, pod->boostUsed, pod->shieldCoolDown - 1,
                       pod->target); // Remove target?
     }
+
+    double getNodeScore(SimulationNode *node) {
+        int pod1CpId = node->pod1.cpId;
+        int pod2CpId = node->pod2.cpId;
+
+        double pod1CpDistance = length(node->pod1.pos, track->getCp(pod1CpId));
+        double pod2CpDistance = length(node->pod2.pos, track->getCp(pod2CpId));
+
+        pod1CpDistance += pod1CpId * MAX_CP_DISTANCE;
+        pod2CpDistance += pod1CpId * MAX_CP_DISTANCE;
+        // TODO: Subtract opponents
+        return pod1CpDistance + pod2CpDistance;
+    }
+};
+
+class AI {
+
 };
 
 /**
