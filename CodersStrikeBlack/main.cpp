@@ -106,8 +106,8 @@ public:
     Vector2D calcOptimalCpPos(Ship2D* ship, Vector2D &cp, Vector2D &nextCp) {
         Vector2D medianPoint = Vector2D((ship->pos.x + nextCp.x), (ship->pos.y + nextCp.y) / 2);
         double radAngleFromCp = angle(cp, medianPoint) / 180 * PI;
-        return {(int )(cp.x + CHECKPOINT_RADIUS * 1 * cos(radAngleFromCp)),
-                (int)(cp.y + CHECKPOINT_RADIUS * 1 * radAngleFromCp)};
+        return {(int )(cp.x + CHECKPOINT_RADIUS * 0.5 * cos(radAngleFromCp)),
+                (int)(cp.y + CHECKPOINT_RADIUS * 0.5 * radAngleFromCp)};
     }
 
     double calcOptimalAngleOffset(Vector2D speed, Vector2D &pos, Vector2D &cp, Vector2D &nextCP) {
@@ -123,7 +123,7 @@ public:
         // return 20 * cos(log10(x + 36) * 8) - x / 18 * turnAngle / 100;
 
         // (x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30
-        return -((x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30) * turnAngle / 200;
+        return -((x-60)*(x-60)*(x-60)/6000 - (x-60)*(x-60)/60 + (x-60)/6+ 30) * turnAngle / 180;
     }
 
     void plan() {
