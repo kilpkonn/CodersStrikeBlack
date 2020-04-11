@@ -91,18 +91,7 @@ struct Ship2D {
 
 class Track {
 public:
-    Ship2D pod1 = Ship2D();
-    Ship2D pod2 = Ship2D();
-    Ship2D opponent1 = Ship2D();
-    Ship2D opponent2 = Ship2D();
     int lapsCount = 3;
-
-    void updatePod(Ship2D *pod, int x, int y, int vx, int vy, int angle, int cpId) {
-        pod->pos = Vector2D(x, y);
-        pod->velocity = Vector2D(vx, vy);
-        pod->angle = angle;
-        pod->cpId = cpId;
-    }
 
     void addNewCheckpoint(Vector2D point) {
         /*for (int i = 0; i < checkpoints.size(); i++) {
@@ -147,21 +136,6 @@ public:
         // (x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30
         return -((x - 60) * (x - 60) * (x - 60) / 6000 - (x - 60) * (x - 60) / 60 + (x - 60) / 6 + 30) * turnAngle /
                180;
-    }
-
-    void plan() {
-        // TODO: Simulation for some AI
-        simulate();
-        cerr << "============== SHIP 1 ==============" << endl;
-        pod1.shieldCoolDown--;
-        calcOptimalTarget(&pod1);
-        evaluateShield(&pod1);
-        evaluateBoost(&pod1);
-        cerr << "============== SHIP 2 ==============" << endl;
-        pod2.shieldCoolDown--;
-        calcOptimalTarget(&pod2);
-        evaluateShield(&pod2);
-        evaluateBoost(&pod2);
     }
 
     double calcOptimalTargetAngle(Ship2D *ship) {
@@ -248,13 +222,13 @@ public:
                         (int) (ship->pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle))};
     }
 
-    void evaluateShield(Ship2D *ship) {
+    void evaluateShield(Ship2D *ship, Ship2D * opponent1, Ship2D *opponent2) {
         Vector2D newPos = Vector2D(ship->pos.x + ship->velocity.x,
                                    ship->pos.y + ship->velocity.y);
-        Vector2D newOpponet1 = Vector2D(opponent1.pos.x + opponent1.velocity.x,
-                                        opponent1.pos.y + opponent1.velocity.y);
-        Vector2D newOpponet2 = Vector2D(opponent2.pos.x + opponent2.velocity.x,
-                                        opponent2.pos.y + opponent2.velocity.y);
+        Vector2D newOpponet1 = Vector2D(opponent1->pos.x + opponent1->velocity.x,
+                                        opponent1->pos.y + opponent1->velocity.y);
+        Vector2D newOpponet2 = Vector2D(opponent2->pos.x + opponent2->velocity.x,
+                                        opponent2->pos.y + opponent2->velocity.y);
 
         if (length(newPos, newOpponet1) < POD_RADIUS * 2.2) {
             if (abs(angle(ship->velocity) - angle(newOpponet1)) > 45) {
@@ -365,6 +339,38 @@ private:
 };
 
 class AI {
+public:
+    Track track = Track();
+
+    Ship2D pod1 = Ship2D();
+    Ship2D pod2 = Ship2D();
+    Ship2D opponent1 = Ship2D();
+    Ship2D opponent2 = Ship2D();
+
+    AI() {}
+
+    void updatePod(Ship2D *pod, int x, int y, int vx, int vy, int angle, int cpId) {
+        pod->pos = Vector2D(x, y);
+        pod->velocity = Vector2D(vx, vy);
+        pod->angle = angle;
+        pod->cpId = cpId;
+    }
+
+    void plan() {
+        // TODO: Simulation for some AI
+        cerr << "============== SHIP 1 ==============" << endl;
+        pod1.shieldCoolDown--;
+        track.calcOptimalTarget(&pod1);
+        track.evaluateShield(&pod1, &opponent1, &opponent2);
+        track.evaluateBoost(&pod1);
+        cerr << "============== SHIP 2 ==============" << endl;
+        pod2.shieldCoolDown--;
+        track.calcOptimalTarget(&pod2);
+        track.evaluateShield(&pod2, &opponent1, &opponent2);
+        track.evaluateBoost(&pod2);
+    }
+
+private:
 
 };
 
@@ -377,52 +383,52 @@ class AI {
 #pragma clang diagnostic ignored "-Wmissing-noreturn"
 
 int main() {
-    Track track;
+    AI ai = AI();
 
-    int lapsCount;
-    int checkpointsCount;
+    int lapsCount = 0;
+    int checkpointsCount = 0;
     cin >> lapsCount >> checkpointsCount;
-    track.lapsCount = lapsCount;
-    int cX, cY;
+    ai.track.lapsCount = lapsCount;
+    int cX = 0, cY = 0;
     for (int i = 0; i < checkpointsCount; i++) {
         cin >> cX >> cY;
-        track.addNewCheckpoint(Vector2D(cX, cY));
+        ai.track.addNewCheckpoint(Vector2D(cX, cY));
     }
 
-    int x, y, vx, vy, angle, cpId;
+    int x = 0, y = 0, vx = 0, vy = 0, angle = 0, cpId = 0;
 
 
     // game loop
     while (1) {
         cin >> x >> y >> vx >> vy >> angle >> cpId;
-        track.updatePod(&track.pod1, x, y, vx, vy, angle, cpId);
+        ai.updatePod(&ai.pod1, x, y, vx, vy, angle, cpId);
         cin >> x >> y >> vx >> vy >> angle >> cpId;
-        track.updatePod(&track.pod2, x, y, vx, vy, angle, cpId);
+        ai.updatePod(&ai.pod2, x, y, vx, vy, angle, cpId);
         cin >> x >> y >> vx >> vy >> angle >> cpId;
-        track.updatePod(&track.opponent1, x, y, vx, vy, angle, cpId);
+        ai.updatePod(&ai.opponent1, x, y, vx, vy, angle, cpId);
         cin >> x >> y >> vx >> vy >> angle >> cpId;
-        track.updatePod(&track.opponent2, x, y, vx, vy, angle, cpId);
+        ai.updatePod(&ai.opponent2, x, y, vx, vy, angle, cpId);
 
         // cerr << "DT" << dt<<endl;
 
-        track.plan();
+        ai.plan();
 
-        cout << track.pod1.target.x << " " << track.pod1.target.y << " ";
-        if (track.pod1.thrust > MAX_THRUST) {
+        cout << ai.pod1.target.x << " " << ai.pod1.target.y << " ";
+        if (ai.pod1.thrust > MAX_THRUST) {
             cout << "BOOST" << endl;
-        } else if (track.pod1.shieldCoolDown == SHIELD_COOL_DOWN) {
+        } else if (ai.pod1.shieldCoolDown == SHIELD_COOL_DOWN) {
             cout << "SHIELD" << endl;
         } else {
-            cout << track.pod1.thrust << endl;
+            cout << ai.pod1.thrust << endl;
         }
 
-        cout << track.pod2.target.x << " " << track.pod2.target.y << " ";
-        if (track.pod2.thrust > MAX_THRUST) {
+        cout << ai.pod2.target.x << " " << ai.pod2.target.y << " ";
+        if (ai.pod2.thrust > MAX_THRUST) {
             cout << "BOOST" << endl;
-        } else if (track.pod2.shieldCoolDown == SHIELD_COOL_DOWN) {
+        } else if (ai.pod2.shieldCoolDown == SHIELD_COOL_DOWN) {
             cout << "SHIELD" << endl;
         } else {
-            cout << track.pod2.thrust << endl;
+            cout << ai.pod2.thrust << endl;
         }
 
     }
