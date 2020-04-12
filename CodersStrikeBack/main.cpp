@@ -3,20 +3,24 @@
 #include <cmath>
 
 #define CHECKPOINT_RADIUS 600
+#define POD_RADIUS 400
+#define MAX_CP_DISTANCE 16000
+
 #define MAX_THRUST 100
 #define BOOST_THRUST 650
 #define SHIELD_COOL_DOWN 3
+#define DRAG 0.85
+
 #define MAX_ANGLE_ALLOWED_BOOST 10
 #define MIN_DISTANCE_ALLOWED_BOOST 6000
-#define POD_RADIUS 400
-#define PI 3.14159265
 #define TARGET_AHEAD_DISTANCE 5000
-#define DRAG 0.85
-#define MAX_CP_DISTANCE 16000
+#define MIN_SHIELD_IMPULSE 200
 
 #define SIMULATION_CHILD_COUNT 5
 #define SIMULATION_DEPTH 3
 #define SIMULATION_ANGLE_DIFF 60
+
+#define PI 3.14159265
 
 using namespace std;
 
@@ -27,12 +31,20 @@ struct Vector2D {
 
     Vector2D(double x, double y) : x(x), y(y) {}
 
-    bool operator==(const Vector2D &p) const {
-        return x == p.x && y == p.y;
+    bool operator==(const Vector2D &v) const {
+        return x == v.x && y == v.y;
     }
 
-    bool operator!=(const Vector2D &p) const {
-        return x != p.x || y != p.y;
+    bool operator!=(const Vector2D &v) const {
+        return x != v.x || y != v.y;
+    }
+
+    Vector2D operator+(const Vector2D &v) const {
+        return {x + v.x, y + v.y};
+    }
+
+    Vector2D operator-(const Vector2D &v) const {
+        return {x - v.x, y - v.y};
     }
 };
 
@@ -131,6 +143,11 @@ public:
                180;
     }
 
+    static double calcRelativeCollisionImpulse(const Vector2D* base, const Vector2D* v) {
+        cerr << "Ipulse " << sin(angle(*base, *v) / 180 * PI) * length(*v) << endl;
+        return sin(angle(*base, *v) / 180 * PI) * length(*v); // TODO: Validate if calculation is correct
+    }
+
     double calcOptimalTargetAngle(const Ship2D *ship) {
         Vector2D nextCP = getCp(ship->cpId + 1);
         Vector2D tmpCP = getCp(ship->cpId);
@@ -221,14 +238,19 @@ public:
         Vector2D newOpponet2 = Vector2D(opponent2->pos.x + opponent2->velocity.x,
                                         opponent2->pos.y + opponent2->velocity.y);
 
+        Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
+
+        // TODO: Calculate impulse
         if (length(newPos, newOpponet1) < POD_RADIUS * 2.2) {
-            if (abs(angle(ship->velocity) - angle(newOpponet1)) > 45) {
+            if (abs(angle(ship->velocity) - angle(newOpponet1)) > 45
+            && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
 
         if (length(newPos, newOpponet2) < POD_RADIUS * 2.2) {
-            if (abs(angle(ship->velocity) - angle(newOpponet2)) > 45) {
+            if (abs(angle(ship->velocity) - angle(newOpponet2)) > 45
+            && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
@@ -353,7 +375,7 @@ public:
         pod->angle = angle;
         if (cpId != pod->cpId % track.checkpointsCount) {
             pod->cpId++;
-            cerr << "! ============= CP =============== !" << endl;
+            // cerr << "! ============= CP =============== !" << endl;
         }
     }
 
@@ -440,7 +462,7 @@ int main() {
 }
 
 void write_pod(const Ship2D &pod) {
-    cout << pod.target.x << " " << pod.target.y << " ";
+    cout << (int) pod.target.x << " " << (int) pod.target.y << " ";
     if (pod.thrust > MAX_THRUST) {
         cout << "BOOST" << endl;
     } else if (pod.shieldCoolDown == SHIELD_COOL_DOWN) {
