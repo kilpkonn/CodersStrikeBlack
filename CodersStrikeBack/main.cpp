@@ -185,7 +185,7 @@ public:
 
         // TODO: Calculate impulse
         if (length(newPos, newOpponet1) < POD_RADIUS * 2.4) {
-            if (abs(angle(ship->velocity) - angle(newOpponet1)) > 45
+            if (abs(angle(ship->velocity) - angle(opponent1->velocity)) > 45
                 && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet1, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
@@ -193,7 +193,7 @@ public:
         }
 
         if (length(newPos, newOpponet2) < POD_RADIUS * 2.4) {
-            if (abs(angle(ship->velocity) - angle(newOpponet2)) > 45
+            if (abs(angle(ship->velocity) - angle(opponent2->velocity)) > 45
                 && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet2, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
@@ -215,8 +215,9 @@ public:
         && length(ship->pos, getCp(ship->cpId)) < 2000
         && abs(Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1))) > 45) {
             cerr << "YAY" << endl;
-            ship->thrust = 0;
-            ship->target = getCp(ship->cpId + 1);
+            ship->thrust = 100 * length(ship->velocity) / length(ship->pos, getCp(ship->cpId));
+            cerr << 100 * length(ship->velocity) / length(ship->pos, getCp(ship->cpId)) << endl;
+            ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
         } else {
             ship->thrust = MAX_THRUST;
         }
