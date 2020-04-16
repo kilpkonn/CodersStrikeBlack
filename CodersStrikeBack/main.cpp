@@ -206,14 +206,20 @@ public:
                                   cos((angle(ship->velocity) - angle(ship->pos, getCp(ship->cpId))) / 180 * PI);
         cerr << "Eff impulse: " << effectiveImpulse << endl;
         //cerr << "Turn: " << Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1)) << endl;
+        Vector2D cp = getCp(ship->cpId);
+
+        cerr << angle(ship->pos, getCp(ship->cpId + 1)) << " - " << angle(ship->pos, cp) << " - " << angle(ship->velocity) << endl;
+
         if (!ship->boostUsed && length(ship->pos, getCp(ship->cpId)) > MIN_DISTANCE_ALLOWED_BOOST
             && abs(normalize_angle(ship->angle - angle(ship->pos, getCp(ship->cpId)))) < MAX_ANGLE_ALLOWED_BOOST) {
             ship->thrust = BOOST_THRUST;
             ship->boostUsed = true;
-        } else if (abs(effectiveImpulse) < 22
+        } else if (abs(effectiveImpulse) < 30
                    && length(ship->pos, opponent1->pos) > 3000
                    && length(ship->pos, opponent2->pos) > 3000
-                   && abs(Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1))) > 45) {
+                   && abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45
+                   && ((angle(ship->pos, getCp(ship->cpId + 1)) > angle(ship->pos, cp) && angle(ship->pos, cp) > angle(ship->velocity))
+                   ||  (angle(ship->pos, getCp(ship->cpId + 1)) < angle(ship->pos, cp) && angle(ship->pos, cp) < angle(ship->velocity)))) {
 
             cerr << "======= SKIPPING CP =======" << endl;
             ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
