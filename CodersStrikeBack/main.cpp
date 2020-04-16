@@ -184,39 +184,40 @@ public:
         Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
 
         // TODO: Calculate impulse
-        if (length(newPos, newOpponet1) < POD_RADIUS * 2.4) {
-            if (abs(angle(ship->velocity) - angle(opponent1->velocity)) > 45
-                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
+        if (length(newPos, newOpponet1) < POD_RADIUS * 3.2) {
+            if (abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) > 45
+                //&& abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet1, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
 
-        if (length(newPos, newOpponet2) < POD_RADIUS * 2.4) {
-            if (abs(angle(ship->velocity) - angle(opponent2->velocity)) > 45
-                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
+        if (length(newPos, newOpponet2) < POD_RADIUS * 3.2) {
+            if (abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) > 45
+                //&& abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet2, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
     }
 
-    void evaluateBoost(Ship2D *ship) {
-        double effectiveImpulse = length(ship->pos, getCp(ship->cpId))
-                                  / sqrt(length(ship->velocity) + 1) *
-                                  sin((angle(ship->velocity) - angle(ship->pos, getCp(ship->cpId))) / 180 * PI);
+    void evaluateBoost(Ship2D *ship, Ship2D *opponent1, Ship2D* opponent2) {
+        double effectiveImpulse = length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG) *
+                                  cos((angle(ship->velocity) - angle(ship->pos, getCp(ship->cpId))) / 180 * PI);
         cerr << "Eff impulse: " << effectiveImpulse << endl;
         //cerr << "Turn: " << Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1)) << endl;
         if (!ship->boostUsed && length(ship->pos, getCp(ship->cpId)) > MIN_DISTANCE_ALLOWED_BOOST
-            && abs(angle(ship->pos, getCp(ship->cpId))) < MAX_ANGLE_ALLOWED_BOOST) {
+            && abs(normalize_angle(ship->angle - angle(ship->pos, getCp(ship->cpId)))) < MAX_ANGLE_ALLOWED_BOOST) {
             ship->thrust = BOOST_THRUST;
             ship->boostUsed = true;
-        } else if (abs(effectiveImpulse) < 20
-                   && length(ship->pos, getCp(ship->cpId)) < 2000
+        } else if (abs(effectiveImpulse) < 22
+                   && length(ship->pos, opponent1->pos) > 3000
+                   && length(ship->pos, opponent2->pos) > 3000
                    && abs(Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1))) > 45) {
+
             cerr << "======= SKIPPING CP =======" << endl;
-            ship->thrust = 100 * length(ship->velocity) / length(ship->pos, getCp(ship->cpId));
-            cerr << 100 * length(ship->velocity) / length(ship->pos, getCp(ship->cpId)) << endl;
+            ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
+            cerr << "Po1 thrust: " << ship->thrust << endl;
             ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
         } else {
             ship->thrust = MAX_THRUST;
@@ -347,85 +348,72 @@ public:
         //pod2.target = Track::calculateTarget(&pod2, best.pod2BestAngle);
 
         Track::evaluateShield(&pod1, &opponent1, &opponent2, track.getCp(pod1.cpId));
-        track.evaluateBoost(&pod1);
+        track.evaluateBoost(&pod1, &opponent1, &opponent2);
 
         //Track::evaluateShield(&pod2, &opponent1, &opponent2, track.getCp(pod2.cpId));
         //track.evaluateBoost(&pod2);
-        planRam2(&pod2);
+        planRam(&pod2);
     }
 
 private:
     bool isReadyToRam = false;
     bool isRamming = false;
-    int turretCp = 999;
 
     void planRam(Ship2D *pod) {
-        Ship2D opponentToRam;
-        int maxCp = turretCp;
-        Vector2D cp = track.getCp(maxCp);
-
-        if (opponent1.cpId > opponent2.cpId) { // TODO: distance
-            opponentToRam = opponent1;
-            if (opponent1.cpId < maxCp) {
-                maxCp = opponent1.cpId;
-            }
-        } else {
+        Ship2D opponentToRam = opponent1;
+        Vector2D cp = track.getCp(opponent1.cpId);
+        if (opponent2.cpId > opponent1.cpId ||
+        (opponent1.cpId == opponent2.cpId && length(opponent1.pos, cp) > length(opponent2.pos, cp) * 1.2)) {
             opponentToRam = opponent2;
-            if (opponent2.cpId < maxCp) {
-                maxCp = opponent2.cpId;
+            cp = track.getCp(opponent2.cpId);
+        }
+
+        if (!isRamming) {
+            // Setup
+            Vector2D torrentCp = track.getCp(opponentToRam.cpId);
+            if (length(pod->pos, torrentCp) * 1.5 < length(opponentToRam.pos, torrentCp)) {
+                cerr << "Lets just ram!" << endl;
+                isRamming = true;
+            } else {
+                torrentCp = track.getCp(opponentToRam.cpId + 1);
             }
-        }
 
-        if (length(pod->pos, cp) > length(opponentToRam.pos, cp)) {
-            maxCp++;
-        }
-        // cerr << maxCp + 2 << " - " << turretCp << endl;
-        maxCp = min(maxCp + 2, turretCp); // Hmm?
-        turretCp = maxCp;
-        // cerr << "new tur " << turretCp << endl;
-
-        cp = track.getCp(maxCp);
-        cerr << "max cp " << turretCp << endl;
-        cerr << isReadyToRam << " <> " << isRamming << endl;
-
-        if (!isReadyToRam && length(pod->pos, cp) < CHECKPOINT_RADIUS) {
-            isReadyToRam = true;
-            turretCp = maxCp;
-            pod->thrust = 0;
-            cerr << " Ready to ram!" << endl;
-        } else if (isReadyToRam && length(pod->pos, cp) > CHECKPOINT_RADIUS * 3) {
-            cerr << "We got baited" << endl;
-            isReadyToRam = isRamming;
-            if (!isRamming) {
-                turretCp = 999;
+            if (length(pod->pos, torrentCp) > length(opponentToRam.pos, cp) + length(cp, torrentCp)) {
+                cerr << "Gotta take shortcut" << endl;
+                torrentCp = track.getCp(opponentToRam.cpId + 2);
             }
-        }
 
-        cerr << "to ram " << opponentToRam.cpId << endl;
+            // Drive to torrent cp
+            pod->target = torrentCp;
 
-        if (!isReadyToRam || opponentToRam.cpId != turretCp) {
-            cerr << "Go to cp: " << maxCp << endl;
-            pod->target = cp;
-            if (length(pod->pos, cp) / length(pod->velocity) > 8) {
+            // Geometric array sum
+            if (length(pod->pos, torrentCp) > length(pod->velocity) / (1 - DRAG)) {
                 pod->thrust = MAX_THRUST;
             } else {
-                pod->thrust = 0; // Khmm
-                pod->target = opponentToRam.pos;
+                pod->thrust = 0;
+            }
+            cerr << "Dist till cp: " << length(pod->pos, torrentCp) << endl;
+            if (length(pod->pos, torrentCp) < CHECKPOINT_RADIUS * 2) {
+                cerr << "Lets go ram!" << endl;
+                isRamming = true;
             }
         } else {
-            cerr << "Acceleration!" << endl;
-            isRamming = true;
-            pod->target = opponentToRam.pos;
-            cerr << "Dist till collision: " << length(pod->pos, pod->target) << endl;
-            if (length(pod->pos, pod->target) < 8000) {
-                pod->thrust = MAX_THRUST;
-                if (length(pod->pos, pod->target) < POD_RADIUS * 2 * 1.3) {
-                    cerr << "SHIELD!!" << endl;
-                    pod->shieldCoolDown = SHIELD_COOL_DOWN;
-                    isRamming = false;
-                    isReadyToRam = false;
-                    turretCp = 999;
-                }
+            // Ram
+            Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 2,
+                                       opponentToRam.pos.y + opponentToRam.velocity.y * 2);
+            pod->target = target;
+            pod->thrust = MAX_THRUST;
+            if (abs(normalize_angle(pod->angle - angle(pod->pos, target))) > 45) {
+                pod->thrust = 0;
+            }
+
+            cerr << "angle " << pod->angle << " vs " << angle(pod->pos, target) << endl;
+            cerr << "Dist till collision" << length(pod->pos, opponentToRam.pos) << endl;
+
+            if (length(pod->pos, opponentToRam.pos) < POD_RADIUS * 2 * 1.8) {
+                cerr << "SHIELD!" << endl;
+                pod->shieldCoolDown = SHIELD_COOL_DOWN;
+                isRamming = false;
             }
         }
     }
