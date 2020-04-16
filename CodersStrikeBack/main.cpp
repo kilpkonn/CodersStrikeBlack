@@ -288,11 +288,6 @@ public:
         return best;
     }
 
-private:
-    void resolveCollisions(Ship2D *pod1, Ship2D *opponent1, Ship2D *opponent2) {
-        // TODO: some calculations
-    }
-
     Ship2D calculateNewPodLocation(Ship2D *pod, double podAngle) {
         podAngle = podAngle / 180 * PI;
         Vector2D newVelocity = Vector2D((pod->velocity.x + cos(podAngle) * pod->thrust) * DRAG,
@@ -302,6 +297,11 @@ private:
         double newAngle = angle(newPos, track->getCp(newCpId));
         return {newPos, newVelocity, newAngle, newCpId, pod->thrust, pod->boostUsed, pod->shieldCoolDown - 1,
                 pod->target}; // Remove target?
+    }
+
+private:
+    void resolveCollisions(Ship2D *pod1, Ship2D *opponent1, Ship2D *opponent2) {
+        // TODO: some calculations
     }
 
     double getNodeScore(SimulationNode *node) {
@@ -351,7 +351,7 @@ public:
 
         //Track::evaluateShield(&pod2, &opponent1, &opponent2, track.getCp(pod2.cpId));
         //track.evaluateBoost(&pod2);
-        planRam(&pod2);
+        planRam2(&pod2);
     }
 
 private:
@@ -393,7 +393,7 @@ private:
             turretCp = maxCp;
             pod->thrust = 0;
             cerr << " Ready to ram!" << endl;
-        } else if (isReadyToRam && length(pod->pos, cp) > CHECKPOINT_RADIUS * 3){
+        } else if (isReadyToRam && length(pod->pos, cp) > CHECKPOINT_RADIUS * 3) {
             cerr << "We got baited" << endl;
             isReadyToRam = isRamming;
             if (!isRamming) {
@@ -427,6 +427,27 @@ private:
                     turretCp = 999;
                 }
             }
+        }
+    }
+
+    void planRam2(Ship2D *pod) {
+        Ship2D opponentToRam = opponent1;
+        Vector2D cp = track.getCp(opponentToRam.cpId);
+        if (opponent2.cpId > opponentToRam.cpId ||
+            (opponentToRam.cpId == opponent2.cpId && length(opponentToRam.pos, cp) > length(opponent2.pos, cp) * 1.2)) {
+            opponentToRam = opponent2;
+        }
+        Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 5,
+                                   opponentToRam.pos.y + opponentToRam.velocity.y * 5);
+        cp = track.getCp(opponentToRam.cpId);
+        if (length(pod->pos, cp) - length(target, cp) < 4000) {
+            pod->target = target;
+        } else {
+            pod->target = track.getCp(opponentToRam.cpId + 1);
+        }
+        if (length(pod->pos, target) < POD_RADIUS * 2 * 1.2) {
+            cerr << "SHIELD!" << endl;
+            pod->shieldCoolDown = SHIELD_COOL_DOWN;
         }
     }
 };
