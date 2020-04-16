@@ -11,14 +11,14 @@
 #define SHIELD_COOL_DOWN 3
 #define DRAG 0.85
 
-#define MAX_ANGLE_ALLOWED_BOOST 10
+#define MAX_ANGLE_ALLOWED_BOOST 15
 #define MIN_DISTANCE_ALLOWED_BOOST 6000
 #define TARGET_AHEAD_DISTANCE 5000
 #define MIN_SHIELD_IMPULSE 200
 
 #define SIMULATION_CHILD_COUNT 5
-#define SIMULATION_DEPTH 3
-#define SIMULATION_ANGLE_DIFF 60
+#define SIMULATION_DEPTH 5
+#define SIMULATION_ANGLE_DIFF 50
 
 #define PI 3.14159265
 
@@ -181,22 +181,25 @@ public:
         Vector2D newOpponet2 = Vector2D(opponent2->pos.x + opponent2->velocity.x,
                                         opponent2->pos.y + opponent2->velocity.y);
 
-        Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
+        // Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
 
-        // TODO: Calculate impulse
-        if (length(newPos, newOpponet1) < POD_RADIUS * 3.2) {
+        if (length(newPos, newOpponet1) < POD_RADIUS * 3.4) {
             if (abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) > 45
-                //&& abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
+                && abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) < 135
+                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet1, cp) - POD_RADIUS / 2.0) {
+                cerr << "Shield for 1!" << endl;
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
 
-        if (length(newPos, newOpponet2) < POD_RADIUS * 3.2) {
+        if (length(newPos, newOpponet2) < POD_RADIUS * 3.4) {
             if (abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) > 45
-                //&& abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
+                && abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) < 135
+                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
                 && length(newPos, cp) < length(newOpponet2, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
+                cerr << "Shield for 1!" << endl;
             }
         }
     }
@@ -219,7 +222,40 @@ public:
                    && length(ship->pos, opponent2->pos) > 3000
                    && abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45
                    && ((angle(ship->pos, getCp(ship->cpId + 1)) > angle(ship->pos, cp) && angle(ship->pos, cp) > angle(ship->velocity))
-                   ||  (angle(ship->pos, getCp(ship->cpId + 1)) < angle(ship->pos, cp) && angle(ship->pos, cp) < angle(ship->velocity)))) {
+                       ||  (angle(ship->pos, getCp(ship->cpId + 1)) < angle(ship->pos, cp) && angle(ship->pos, cp) < angle(ship->velocity)))) {
+
+            cerr << "======= SKIPPING CP =======" << endl;
+            ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
+            cerr << "Po1 thrust: " << ship->thrust << endl;
+            ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
+        } else {
+            ship->thrust = MAX_THRUST;
+        }
+    }
+
+    void evaluateBoost2(Ship2D *ship, Ship2D *opponent1, Ship2D *opponent2) {
+        double effectiveImpulse = length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG) *
+                                  cos((angle(ship->velocity) - angle(ship->pos, getCp(ship->cpId))) / 180 * PI);
+        cerr << "Eff impulse: " << effectiveImpulse << endl;
+        //cerr << "Turn: " << Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1)) << endl;
+        Vector2D cp = getCp(ship->cpId);
+
+        cerr << angle(ship->pos, getCp(ship->cpId + 1)) << " - " << angle(ship->pos, cp) << " - " << angle(ship->velocity) << endl;
+
+        if (!ship->boostUsed && length(ship->pos, getCp(ship->cpId)) > MIN_DISTANCE_ALLOWED_BOOST
+            && abs(normalize_angle(ship->angle - angle(ship->pos, getCp(ship->cpId)))) < MAX_ANGLE_ALLOWED_BOOST) {
+            ship->thrust = BOOST_THRUST;
+            ship->boostUsed = true;
+        } else if (abs(effectiveImpulse) < 30
+                   && length(ship->pos, opponent1->pos) > 2000
+                   && length(ship->pos, opponent2->pos) > 2000
+                   && abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45
+                   &&
+                   ((angle(ship->pos, getCp(ship->cpId + 1)) > angle(ship->pos, cp) && angle(ship->pos, cp) > angle(ship->velocity) &&
+                     angle(ship->pos, getCp(ship->cpId + 1)) / angle(ship->pos, cp) > 0)
+                    ||
+                    ((angle(ship->pos, getCp(ship->cpId + 1)) < angle(ship->pos, cp) && angle(ship->pos, cp) < angle(ship->velocity)) &&
+                     angle(ship->pos, getCp(ship->cpId + 1)) / angle(ship->pos, cp) > 0))) {
 
             cerr << "======= SKIPPING CP =======" << endl;
             ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
@@ -369,7 +405,7 @@ private:
         Ship2D opponentToRam = opponent1;
         Vector2D cp = track.getCp(opponent1.cpId);
         if (opponent2.cpId > opponent1.cpId ||
-        (opponent1.cpId == opponent2.cpId && length(opponent1.pos, cp) > length(opponent2.pos, cp) * 1.2)) {
+            (opponent1.cpId == opponent2.cpId && length(opponent1.pos, cp) > length(opponent2.pos, cp) * 1.2)) {
             opponentToRam = opponent2;
             cp = track.getCp(opponent2.cpId);
         }
