@@ -226,7 +226,7 @@ public:
 
             cerr << "======= SKIPPING CP =======" << endl;
             ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
-            cerr << "Po1 thrust: " << ship->thrust << endl;
+            cerr << "Pod 1 thrust: " << ship->thrust << endl;
             ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
         } else {
             ship->thrust = MAX_THRUST;
@@ -240,7 +240,10 @@ public:
         //cerr << "Turn: " << Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1)) << endl;
         Vector2D cp = getCp(ship->cpId);
 
-        cerr << angle(ship->pos, getCp(ship->cpId + 1)) << " - " << angle(ship->pos, cp) << " - " << angle(ship->velocity) << endl;
+        double nextCpAngle = angle(ship->pos, getCp(ship->cpId + 1));
+        double cpAngle = angle(ship->pos, cp);
+        double velocityAngle = angle(ship->velocity);
+        cerr << nextCpAngle << " - " << cpAngle << " - " << velocityAngle << endl;
 
         if (!ship->boostUsed && length(ship->pos, getCp(ship->cpId)) > MIN_DISTANCE_ALLOWED_BOOST
             && abs(normalize_angle(ship->angle - angle(ship->pos, getCp(ship->cpId)))) < MAX_ANGLE_ALLOWED_BOOST) {
@@ -250,16 +253,11 @@ public:
                    && length(ship->pos, opponent1->pos) > 2000
                    && length(ship->pos, opponent2->pos) > 2000
                    && abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45
-                   &&
-                   ((angle(ship->pos, getCp(ship->cpId + 1)) > angle(ship->pos, cp) && angle(ship->pos, cp) > angle(ship->velocity) &&
-                     angle(ship->pos, getCp(ship->cpId + 1)) / angle(ship->pos, cp) > 0)
-                    ||
-                    ((angle(ship->pos, getCp(ship->cpId + 1)) < angle(ship->pos, cp) && angle(ship->pos, cp) < angle(ship->velocity)) &&
-                     angle(ship->pos, getCp(ship->cpId + 1)) / angle(ship->pos, cp) > 0))) {
+                   && normalize_angle(nextCpAngle - velocityAngle) / normalize_angle(cpAngle - velocityAngle) > 0) {
 
             cerr << "======= SKIPPING CP =======" << endl;
             ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
-            cerr << "Po1 thrust: " << ship->thrust << endl;
+            cerr << "Pod 1 thrust: " << ship->thrust << endl;
             ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
         } else {
             ship->thrust = MAX_THRUST;
@@ -387,10 +385,9 @@ public:
         SimulationNode best = root.evaluate();
 
         pod1.target = Track::calculateTarget(&pod1, best.pod1BestAngle);
-        //pod2.target = Track::calculateTarget(&pod2, best.pod2BestAngle);
 
         Track::evaluateShield(&pod1, &opponent1, &opponent2, track.getCp(pod1.cpId));
-        track.evaluateBoost(&pod1, &opponent1, &opponent2);
+        track.evaluateBoost2(&pod1, &opponent1, &opponent2);
 
         //Track::evaluateShield(&pod2, &opponent1, &opponent2, track.getCp(pod2.cpId));
         //track.evaluateBoost(&pod2);
