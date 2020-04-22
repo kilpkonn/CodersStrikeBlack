@@ -173,33 +173,31 @@ public:
                 ship->pos.y + TARGET_AHEAD_DISTANCE * sin(radAngle)};
     }
 
-    static void evaluateShield(Ship2D *ship, const Ship2D *opponent1, const Ship2D *opponent2, const Vector2D &cp) {
-        Vector2D newPos = Vector2D(ship->pos.x + ship->velocity.x,
-                                   ship->pos.y + ship->velocity.y);
-        Vector2D newOpponet1 = Vector2D(opponent1->pos.x + opponent1->velocity.x,
-                                        opponent1->pos.y + opponent1->velocity.y);
-        Vector2D newOpponet2 = Vector2D(opponent2->pos.x + opponent2->velocity.x,
-                                        opponent2->pos.y + opponent2->velocity.y);
+     void evaluateShield(Ship2D *ship, const Ship2D *opponent1, const Ship2D *opponent2, const Vector2D &cp) {
 
         // Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
 
-        if (length(newPos, newOpponet1) < POD_RADIUS * 3.4) {
+        Ship2D newPod = calculateNewPodLocation(ship, angle(ship->target));
+        Ship2D newOpponent1 = calculateNewPodLocation(opponent1, angle(opponent1->velocity), 1.4);
+        Ship2D newOpponent2 = calculateNewPodLocation(opponent2, angle(opponent2->velocity), 1.4);
+
+        if (length(newPod.pos, newOpponent1.pos) < POD_RADIUS * 2) {
             if (abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) > 45
                 && abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) < 135
                 && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
-                && length(newPos, cp) < length(newOpponet1, cp) - POD_RADIUS / 2.0) {
+                && length(newPod.pos, cp) < length(newOpponent1.pos, cp) - POD_RADIUS / 2.0) {
                 cerr << "Shield for 1!" << endl;
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
 
-        if (length(newPos, newOpponet2) < POD_RADIUS * 3.4) {
+        if (length(newPod.pos, newOpponent2.pos) < POD_RADIUS * 2) {
             if (abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) > 45
                 && abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) < 135
                 && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
-                && length(newPos, cp) < length(newOpponet2, cp) - POD_RADIUS / 2.0) {
+                && length(newPod.pos, cp) < length(newOpponent2.pos, cp) - POD_RADIUS / 2.0) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
-                cerr << "Shield for 1!" << endl;
+                cerr << "Shield for 2!" << endl;
             }
         }
     }
@@ -224,19 +222,49 @@ public:
             ship->thrust = BOOST_THRUST;
             ship->boostUsed = true;
         } else if (abs(effectiveImpulse) < 30
-                   && length(ship->pos, opponent1->pos) > 2000
-                   && length(ship->pos, opponent2->pos) > 2000
-                   && abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45
+                   && length(ship->pos, opponent1->pos) > 1500
+                   && length(ship->pos, opponent2->pos) > 1500
                    && normalize_angle(nextCpAngle - velocityAngle) / normalize_angle(cpAngle - velocityAngle) > 0
                    && abs(cpAngle - velocityAngle) < 45) {
 
             cerr << "======= SKIPPING CP =======" << endl;
-            ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
+            if (abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45) {
+                ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
+            }
             cerr << "Pod 1 thrust: " << ship->thrust << endl;
             ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
         } else {
-            ship->thrust = MAX_THRUST;
+            cerr << "Ship angle " << abs(normalize_angle(ship->angle - cpAngle)) << " speed " << length(ship->velocity) << endl;
+            if (abs(normalize_angle(ship->angle - cpAngle)) > 45 && length(ship->velocity) > 300) {
+                ship->thrust = 0;
+            } else {
+                ship->thrust = MAX_THRUST;
+            }
         }
+    }
+
+    Ship2D calculateNewPodLocation(const Ship2D *pod, double podAngle, double steps = 1) {
+        podAngle = podAngle / 180 * PI;
+        Vector2D newVelocity = Vector2D((pod->velocity.x + cos(podAngle) * pod->thrust) * DRAG,
+                                        (pod->velocity.y + sin(podAngle) * pod->thrust) * DRAG);
+        Vector2D newPos = Vector2D(pod->pos.x + newVelocity.x * steps, pod->pos.y + newVelocity.y * steps); // Use average instead?
+        int newCpId = length(pod->pos, getCp(pod->cpId)) < CHECKPOINT_RADIUS ? pod->cpId + 1 : pod->cpId;
+        double newAngle = angle(newPos, getCp(newCpId));
+        return {newPos, newVelocity, newAngle, newCpId, pod->thrust, pod->boostUsed, pod->shieldCoolDown - 1,
+                pod->target}; // Remove target?
+    }
+
+    bool willCollide(Ship2D* pod1, Ship2D*pod2, int steps) {
+        bool result = false;
+
+        for (int i = 0; i < steps; i++) {
+            Ship2D newPod1 = calculateNewPodLocation(pod1, angle(pod1->velocity));
+            Ship2D newPod2 = calculateNewPodLocation(pod2, angle(pod2->velocity));
+
+            result |= length(newPod1.pos, newPod2.pos) <= POD_RADIUS * 2;
+        }
+
+        return result;
     }
 
 private:
@@ -281,11 +309,11 @@ public:
 
             // cerr << d1 << endl;
             pod1Angle = pod1BaseAngle + d1;
-            Ship2D newPod1 = calculateNewPodLocation(&pod1, pod1Angle);
-            Ship2D newPod2 = calculateNewPodLocation(&pod2, angle(pod2.velocity));
+            Ship2D newPod1 = track->calculateNewPodLocation(&pod1, pod1Angle);
+            Ship2D newPod2 = track->calculateNewPodLocation(&pod2, angle(pod2.velocity));
 
-            Ship2D newOpponent1 = calculateNewPodLocation(&opponent1, angle(opponent2.velocity));
-            Ship2D newOpponent2 = calculateNewPodLocation(&opponent2, angle(opponent2.velocity));
+            Ship2D newOpponent1 = track->calculateNewPodLocation(&opponent1, angle(opponent2.velocity));
+            Ship2D newOpponent2 = track->calculateNewPodLocation(&opponent2, angle(opponent2.velocity));
 
             // resolveCollisions(&newPod1, &newPod2, &newOpponent1, &newOpponent2);
 
@@ -302,17 +330,6 @@ public:
 
         }
         return best;
-    }
-
-    Ship2D calculateNewPodLocation(Ship2D *pod, double podAngle) {
-        podAngle = podAngle / 180 * PI;
-        Vector2D newVelocity = Vector2D((pod->velocity.x + cos(podAngle) * pod->thrust) * DRAG,
-                                        (pod->velocity.y + sin(podAngle) * pod->thrust) * DRAG);
-        Vector2D newPos = Vector2D(pod->pos.x + newVelocity.x, pod->pos.y + newVelocity.y); // Use average instead?
-        int newCpId = length(pod->pos, track->getCp(pod->cpId)) < CHECKPOINT_RADIUS ? pod->cpId + 1 : pod->cpId;
-        double newAngle = angle(newPos, track->getCp(newCpId));
-        return {newPos, newVelocity, newAngle, newCpId, pod->thrust, pod->boostUsed, pod->shieldCoolDown - 1,
-                pod->target}; // Remove target?
     }
 
 private:
@@ -361,7 +378,7 @@ public:
 
         pod1.target = Track::calculateTarget(&pod1, best.pod1BestAngle);
 
-        Track::evaluateShield(&pod1, &opponent1, &opponent2, track.getCp(pod1.cpId));
+        track.evaluateShield(&pod1, &opponent1, &opponent2, track.getCp(pod1.cpId));
         track.evaluateBoost2(&pod1, &opponent1, &opponent2);
 
         //Track::evaluateShield(&pod2, &opponent1, &opponent2, track.getCp(pod2.cpId));
@@ -377,7 +394,7 @@ private:
         Ship2D opponentToRam = opponent1;
         Vector2D cp = track.getCp(opponent1.cpId);
         if (opponent2.cpId > opponent1.cpId ||
-            (opponent1.cpId == opponent2.cpId && length(opponent1.pos, cp) > length(opponent2.pos, cp) * 1.2)) {
+            (opponent1.cpId == opponent2.cpId && length(opponent1.pos, cp) > length(opponent2.pos, cp) * 1.4)) {
             opponentToRam = opponent2;
             cp = track.getCp(opponent2.cpId);
         }
@@ -415,7 +432,14 @@ private:
             // Ram
             Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 2,
                                        opponentToRam.pos.y + opponentToRam.velocity.y * 2);
-            pod->target = target;
+            if (track.willCollide(&pod1, &pod2, 7)) {
+                cerr << "Friendly fire!!!" << endl;
+                // TODO: only works if pod2 is ramming
+                pod->target = Track::calculateTarget(pod, angle(pod->pos, pod1.pos) + 90);
+
+            } else {
+                pod->target = target;
+            }
             pod->thrust = MAX_THRUST;
             if (abs(normalize_angle(pod->angle - angle(pod->pos, target))) > 45) {
                 pod->thrust = 0;
@@ -424,7 +448,11 @@ private:
             cerr << "angle " << pod->angle << " vs " << angle(pod->pos, target) << endl;
             cerr << "Dist till collision" << length(pod->pos, opponentToRam.pos) << endl;
 
-            if (length(pod->pos, opponentToRam.pos) < POD_RADIUS * 2 * 1.8) {
+            Ship2D newPod = track.calculateNewPodLocation(pod, angle(pod->target));
+            Ship2D newOpponent1 = track.calculateNewPodLocation(&opponent1, angle(opponent1.velocity), 1.2);
+            Ship2D newOpponent2 = track.calculateNewPodLocation(&opponent2, angle(opponent2.velocity), 1.2);
+
+            if (length(newPod.pos, newOpponent1.pos) < POD_RADIUS * 2 || length(newPod.pos, newOpponent2.pos) < POD_RADIUS * 2) {
                 cerr << "SHIELD!" << endl;
                 pod->shieldCoolDown = SHIELD_COOL_DOWN;
                 isRamming = false;
