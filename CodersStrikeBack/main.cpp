@@ -18,7 +18,8 @@
 
 #define SIMULATION_CHILD_COUNT 7
 #define SIMULATION_DEPTH 4
-#define SIMULATION_ANGLE_DIFF 110
+#define SIMULATION_ANGLE_DIFF 90
+#define SIMULATION_STEP_LENGTH 1
 
 #define PI 3.14159265
 
@@ -198,46 +199,6 @@ public:
         }
     }
 
-    void evaluateBoost2(Ship2D *ship, Ship2D *opponent1, Ship2D *opponent2) {
-        double effectiveImpulse = length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG) *
-                                  cos((angle(ship->velocity) - angle(ship->pos, getCp(ship->cpId))) / 180 * PI);
-        cerr << "Eff impulse: " << effectiveImpulse << endl;
-        //cerr << "Turn: " << Track::calcTurnAngle(ship->pos, getCp(ship->cpId), getCp(ship->cpId + 1)) << endl;
-        Vector2D cp = getCp(ship->cpId);
-
-        double nextCpAngle = angle(ship->pos, getCp(ship->cpId + 1));
-        double cpAngle = angle(ship->pos, cp);
-        double velocityAngle = angle(ship->velocity);
-        cerr << nextCpAngle << " - " << cpAngle << " - " << velocityAngle << endl;
-        cerr << "some angle" <<  abs(cpAngle - velocityAngle) << endl;
-
-        // TODO: Some smarter check if one vector is between 2 other vectors
-
-        if (!ship->boostUsed && length(ship->pos, getCp(ship->cpId)) > MIN_DISTANCE_ALLOWED_BOOST
-            && abs(normalize_angle(ship->angle - angle(ship->pos, getCp(ship->cpId)))) < MAX_ANGLE_ALLOWED_BOOST) {
-            ship->thrust = BOOST_THRUST;
-            ship->boostUsed = true;
-        } else if (abs(effectiveImpulse) < 30
-                   && length(ship->pos, opponent1->pos) > 1500
-                   && length(ship->pos, opponent2->pos) > 1500
-                   && normalize_angle(nextCpAngle - velocityAngle) / normalize_angle(cpAngle - velocityAngle) > 0
-                   && abs(cpAngle - velocityAngle) < 45) {
-
-            cerr << "======= SKIPPING CP =======" << endl;
-            if (abs(Track::calcTurnAngle(ship->pos, cp, getCp(ship->cpId + 1))) > 45) {
-                ship->thrust = min(100.0, 2 * length(ship->pos, getCp(ship->cpId)) / length(ship->velocity) / (1 - DRAG));
-            }
-            cerr << "Pod 1 thrust: " << ship->thrust << endl;
-            ship->target = calcOptimalCpPos(ship, getCp(ship->cpId + 1), getCp(ship->cpId + 2));
-        } else {
-            cerr << "Ship angle " << abs(normalize_angle(ship->angle - cpAngle)) << " speed " << length(ship->velocity) << endl;
-            if (abs(normalize_angle(ship->angle - cpAngle)) > 45 && length(ship->velocity) > 300) {
-                ship->thrust = 0;
-            } else {
-                ship->thrust = MAX_THRUST;
-            }
-        }
-    }
 
     Ship2D calculateNewPodLocation(const Ship2D *pod, double podAngle, double steps = 1) {
         podAngle = podAngle / 180 * PI;
@@ -307,11 +268,17 @@ public:
                 //cerr << thrust << endl;
                 pod1Angle = pod1BaseAngle + d1;
                 pod1.thrust = thrust;
-                Ship2D newPod1 = track->calculateNewPodLocation(&pod1, pod1Angle);
-                Ship2D newPod2 = track->calculateNewPodLocation(&pod2, angle(pod2.velocity));
+                Ship2D newPod1 = track->calculateNewPodLocation(&pod1, pod1Angle, SIMULATION_STEP_LENGTH);
+                Ship2D newPod2 = track->calculateNewPodLocation(&pod2, angle(pod2.velocity), SIMULATION_STEP_LENGTH);
 
-                Ship2D newOpponent1 = track->calculateNewPodLocation(&opponent1, angle(opponent2.velocity));
-                Ship2D newOpponent2 = track->calculateNewPodLocation(&opponent2, angle(opponent2.velocity));
+                Ship2D newOpponent1 = track->calculateNewPodLocation(&opponent1, angle(opponent2.velocity), SIMULATION_STEP_LENGTH);
+                Ship2D newOpponent2 = track->calculateNewPodLocation(&opponent2, angle(opponent2.velocity), SIMULATION_STEP_LENGTH);
+
+                //if (depth == SIMULATION_DEPTH && d1 == -SIMULATION_ANGLE_DIFF / 2) {
+                //    cerr << pod1.velocity.x << " - " << pod1.velocity.y << " o " << opponent1.velocity.x << " - " << opponent1.velocity.y << endl;
+                    resolveCollisions(&newPod1, &newOpponent1);
+                    resolveCollisions(&newPod1, &newOpponent2);
+                //}
 
                 // resolveCollisions(&newPod1, &newPod2, &newOpponent1, &newOpponent2);
 
@@ -332,16 +299,37 @@ public:
     }
 
 private:
-    void resolveCollisions(Ship2D *pod1, Ship2D *opponent1, Ship2D *opponent2) {
-        // TODO: some calculations
+    void resolveCollisions(Ship2D *pod1, Ship2D *pod2) {
+        if (length(pod1->pos, pod2->pos) > POD_RADIUS * 2) return;
+
+        double px = pod1->velocity.x + pod2->velocity.x;
+        double py = pod1->velocity.y + pod2->velocity.y;
+
+        double v1x = px - pod1->velocity.x;
+        double v1y = py - pod1->velocity.y;
+
+        double v2x = px - pod2->velocity.x;
+        double v2y = py - pod2->velocity.y;
+
+        // cerr << v1x << " | " << v1y << "  <> " << v2x <<  " | " << v2y << endl;
+        pod1->velocity = Vector2D(v1x, v1y);
+        pod2->velocity = Vector2D(v2x, v2y);
     }
 
+    /**
+     * Bigger better
+     * @param node
+     * @return score
+     */
     double getNodeScore(SimulationNode *node) {
         int pod1CpId = node->pod1.cpId;
 
         double pod1CpDistance = MAX_CP_DISTANCE - length(node->pod1.pos, track->getCp(pod1CpId));
 
         pod1CpDistance += pod1CpId * MAX_CP_DISTANCE;
+
+        /*pod1CpDistance += length(node->pod1.velocity) *
+                cos(normalize_angle(angle(node->pod1.pos, track->getCp(pod1CpId)) - angle(node->pod1.velocity)) / 180 * PI);*/
         // TODO: Subtract opponents
         return pod1CpDistance;
     }
