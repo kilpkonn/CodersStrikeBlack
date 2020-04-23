@@ -178,24 +178,20 @@ public:
         // Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity);
 
         Ship2D newPod = calculateNewPodLocation(ship, angle(ship->target));
-        Ship2D newOpponent1 = calculateNewPodLocation(opponent1, angle(opponent1->velocity), 1.4);
-        Ship2D newOpponent2 = calculateNewPodLocation(opponent2, angle(opponent2->velocity), 1.4);
+        Ship2D newOpponent1 = calculateNewPodLocation(opponent1, angle(opponent1->velocity), 0);
+        Ship2D newOpponent2 = calculateNewPodLocation(opponent2, angle(opponent2->velocity), 0);
 
-        if (length(newPod.pos, newOpponent1.pos) < POD_RADIUS * 2) {
-            if (abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) > 45
-                && abs(normalize_angle(angle(ship->velocity) - angle(opponent1->velocity))) < 135
-                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent1->velocity)) > MIN_SHIELD_IMPULSE
-                && length(newPod.pos, cp) < length(newOpponent1.pos, cp) - POD_RADIUS / 2.0) {
+        if (willCollide(ship, opponent1, 2)) {
+            if (length(opponent1->velocity) > 200
+            && abs(normalize_angle(angle(ship->pos, cp) - angle(ship->pos, opponent1->pos))) < 45) {
                 cerr << "Shield for 1!" << endl;
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
             }
         }
 
-        if (length(newPod.pos, newOpponent2.pos) < POD_RADIUS * 2) {
-            if (abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) > 45
-                && abs(normalize_angle(angle(ship->velocity) - angle(opponent2->velocity))) < 135
-                && abs(Track::calcRelativeCollisionImpulse(&ship->velocity, &opponent2->velocity)) > MIN_SHIELD_IMPULSE
-                && length(newPod.pos, cp) < length(newOpponent2.pos, cp) - POD_RADIUS / 2.0) {
+        if (willCollide(ship, opponent2, 2)) {
+            if (length(opponent2->velocity) > 200
+            && abs(normalize_angle(angle(ship->pos, cp) - angle(ship->pos, opponent2->pos))) < 45) {
                 ship->shieldCoolDown = SHIELD_COOL_DOWN;
                 cerr << "Shield for 2!" << endl;
             }
@@ -254,12 +250,12 @@ public:
                 pod->target}; // Remove target?
     }
 
-    bool willCollide(Ship2D* pod1, Ship2D*pod2, int steps) {
+    bool willCollide(const Ship2D* pod1, const Ship2D*pod2, int steps) {
         bool result = false;
 
         for (int i = 0; i < steps; i++) {
-            Ship2D newPod1 = calculateNewPodLocation(pod1, angle(pod1->velocity));
-            Ship2D newPod2 = calculateNewPodLocation(pod2, angle(pod2->velocity));
+            Ship2D newPod1 = calculateNewPodLocation(pod1, angle(pod1->velocity), i + 1);
+            Ship2D newPod2 = calculateNewPodLocation(pod2, angle(pod2->velocity), i + 1);
 
             result |= length(newPod1.pos, newPod2.pos) <= POD_RADIUS * 2;
         }
@@ -449,8 +445,8 @@ private:
             cerr << "Dist till collision" << length(pod->pos, opponentToRam.pos) << endl;
 
             Ship2D newPod = track.calculateNewPodLocation(pod, angle(pod->target));
-            Ship2D newOpponent1 = track.calculateNewPodLocation(&opponent1, angle(opponent1.velocity), 1.2);
-            Ship2D newOpponent2 = track.calculateNewPodLocation(&opponent2, angle(opponent2.velocity), 1.2);
+            Ship2D newOpponent1 = track.calculateNewPodLocation(&opponent1, angle(opponent1.velocity), 1.5);
+            Ship2D newOpponent2 = track.calculateNewPodLocation(&opponent2, angle(opponent2.velocity), 1.5);
 
             if (length(newPod.pos, newOpponent1.pos) < POD_RADIUS * 2 || length(newPod.pos, newOpponent2.pos) < POD_RADIUS * 2) {
                 cerr << "SHIELD!" << endl;
