@@ -16,9 +16,9 @@
 #define TARGET_AHEAD_DISTANCE 5000
 #define MIN_SHIELD_IMPULSE 200
 
-#define SIMULATION_CHILD_COUNT 5
-#define SIMULATION_DEPTH 5
-#define SIMULATION_ANGLE_DIFF 50
+#define SIMULATION_CHILD_COUNT 7
+#define SIMULATION_DEPTH 4
+#define SIMULATION_ANGLE_DIFF 110
 
 #define PI 3.14159265
 
@@ -271,7 +271,7 @@ class SimulationNode {
 public:
     Track *track;
     Ship2D pod1, pod2, opponent1, opponent2;
-    double pod1BestAngle = 0, pod2BestAngle = 0;
+    double podBestAngle = 0, podBestThrust = 0;
     double score = 0;
 
     SimulationNode() : track(nullptr) {}
@@ -293,7 +293,7 @@ public:
             return *this;
         }
 
-        double pod1BaseAngle = track->calcOptimalTargetAngle(&pod1);
+        double pod1BaseAngle = angle(pod1.pos, track->getCp(pod1.cpId)); // track->calcOptimalTargetAngle(&pod1);
 
         double pod1Angle;
         // cerr << depth << " Cpids: " << pod1.cpId << " - " << pod2.cpId << endl;
@@ -303,27 +303,30 @@ public:
         for (short d1 = -SIMULATION_ANGLE_DIFF / 2;
              d1 <= SIMULATION_ANGLE_DIFF / 2; d1 += SIMULATION_ANGLE_DIFF / (SIMULATION_CHILD_COUNT - 1)) {
 
-            // cerr << d1 << endl;
-            pod1Angle = pod1BaseAngle + d1;
-            Ship2D newPod1 = track->calculateNewPodLocation(&pod1, pod1Angle);
-            Ship2D newPod2 = track->calculateNewPodLocation(&pod2, angle(pod2.velocity));
+            for (int thrust = 0; thrust <= MAX_THRUST; thrust += MAX_THRUST) {
+                //cerr << thrust << endl;
+                pod1Angle = pod1BaseAngle + d1;
+                pod1.thrust = thrust;
+                Ship2D newPod1 = track->calculateNewPodLocation(&pod1, pod1Angle);
+                Ship2D newPod2 = track->calculateNewPodLocation(&pod2, angle(pod2.velocity));
 
-            Ship2D newOpponent1 = track->calculateNewPodLocation(&opponent1, angle(opponent2.velocity));
-            Ship2D newOpponent2 = track->calculateNewPodLocation(&opponent2, angle(opponent2.velocity));
+                Ship2D newOpponent1 = track->calculateNewPodLocation(&opponent1, angle(opponent2.velocity));
+                Ship2D newOpponent2 = track->calculateNewPodLocation(&opponent2, angle(opponent2.velocity));
 
-            // resolveCollisions(&newPod1, &newPod2, &newOpponent1, &newOpponent2);
+                // resolveCollisions(&newPod1, &newPod2, &newOpponent1, &newOpponent2);
 
-            node = SimulationNode(track, newPod1, newPod2, opponent1, opponent2).evaluate(depth - 1);
+                node = SimulationNode(track, newPod1, newPod2, opponent1, opponent2).evaluate(depth - 1);
 
-            if (node.score > score) {
-                // cerr << "Depth " << depth << endl;
-                // cerr << "Pod1 angle " << pod1Angle;
-                score = node.score;
-                best = node;
-                // We need pod angles from here, not from leaf node
-                best.pod1BestAngle = pod1Angle;
+                if (node.score > score) {
+                    // cerr << "Depth " << depth << endl;
+                    // cerr << "Pod1 angle " << pod1Angle;
+                    score = node.score;
+                    best = node;
+                    // We need pod angles from here, not from leaf node
+                    best.podBestAngle = pod1Angle;
+                    best.podBestThrust = thrust;
+                }
             }
-
         }
         return best;
     }
@@ -372,10 +375,11 @@ public:
         SimulationNode root = SimulationNode(&track, pod1, pod2, opponent1, opponent2);
         SimulationNode best = root.evaluate();
 
-        pod1.target = Track::calculateTarget(&pod1, best.pod1BestAngle);
+        pod1.target = Track::calculateTarget(&pod1, best.podBestAngle);
+        pod1.thrust = best.podBestThrust;
 
         track.evaluateShield(&pod1, &opponent1, &opponent2, track.getCp(pod1.cpId));
-        track.evaluateBoost2(&pod1, &opponent1, &opponent2);
+        // track.evaluateBoost2(&pod1, &opponent1, &opponent2);
 
         //Track::evaluateShield(&pod2, &opponent1, &opponent2, track.getCp(pod2.cpId));
         //track.evaluateBoost(&pod2);
