@@ -18,7 +18,7 @@
 
 #define SIMULATION_CHILD_COUNT 7
 #define SIMULATION_DEPTH 4
-#define SIMULATION_ANGLE_DIFF 90
+#define SIMULATION_ANGLE_DIFF 110
 #define SIMULATION_STEP_LENGTH 1
 
 #define PI 3.14159265
@@ -127,45 +127,9 @@ public:
                 cp.y + CHECKPOINT_RADIUS * 0.5 * radAngleFromCp};
     }
 
-    static double calcOptimalAngleOffset(const Vector2D speed, const Vector2D &pos, const Vector2D &cp, const Vector2D &nextCP) {
-        double x = length(pos, cp) / 150; // Map 0 - 15000 to 0 - 100
-        // cerr << "x " << x << endl;
-        double turnAngle = calcTurnAngle(pos, cp, nextCP);
-        // cerr << "a " << turnAngle << endl;
-        // log(x + 1) * 80 - sqrt(x) * 16
-        // log((x -10)/3 + 4) * 75 - sqrt((x)/2) * 16
-        // return -(log10((x - 10) / 3 + 4) * 70 - sqrt((x + 2) / 2) * 16 + x / 10) * turnAngle / 50;
-
-        // 20 * cos(log(x + 36) * 8) - x/18
-        // return 20 * cos(log10(x + 36) * 8) - x / 18 * turnAngle / 100;
-
-        // (x-50)*(x-50)*(x-50)/6000 - (x-50)*(x-50)/60 + (x-50)/6+ 30
-        return -((x - 60) * (x - 60) * (x - 60) / 6000 - (x - 60) * (x - 60) / 60 + (x - 60) / 6 + 30) * turnAngle /
-               180;
-    }
-
     static double calcRelativeCollisionImpulse(const Vector2D *base, const Vector2D *v) {
         //cerr << "Ipulse " << sin(angle(*base, *v) / 180 * PI) * length(*v) << endl;
         return sin(angle(*base, *v) / 180 * PI) * length(*v); // TODO: Validate if calculation is correct
-    }
-
-    double calcOptimalTargetAngle(const Ship2D *ship) {
-        Vector2D nextCP = getCp(ship->cpId + 1);
-        Vector2D tmpCP = getCp(ship->cpId);
-        Vector2D currentCP = calcOptimalCpPos(ship, tmpCP, nextCP);
-        double angleToCP = angle(ship->pos, currentCP);
-        double velocityAngle = atan2(ship->velocity.y, ship->velocity.x) * 180 / PI;
-
-        double preferredAngleOffset = calcOptimalAngleOffset(ship->velocity, ship->pos, currentCP, nextCP);
-        double targetAngle = normalize_angle(angleToCP + preferredAngleOffset);
-
-        Vector2D newPos = Vector2D(ship->pos.x + ship->velocity.x, ship->pos.y + ship->velocity.y);
-
-        double newAngleToCP = angle(newPos, currentCP);
-        double newPreferredOffset = calcOptimalAngleOffset(ship->velocity, newPos, currentCP, nextCP);
-        double newTargetAngle = normalize_angle(newAngleToCP + newPreferredOffset);
-        // cerr << "Base target " << (targetAngle + newTargetAngle) / 2 << endl;
-        return (targetAngle + newTargetAngle) / 2;
     }
 
     static Vector2D calculateTarget(const Ship2D *ship, const double &angle) {
@@ -254,7 +218,7 @@ public:
             return *this;
         }
 
-        double pod1BaseAngle = angle(pod1.pos, track->getCp(pod1.cpId)); // track->calcOptimalTargetAngle(&pod1);
+        double pod1BaseAngle = angle(pod1.pos, Track::calcOptimalCpPos(&pod1, track->getCp(pod1.cpId), track->getCp(pod1.cpId + 1)));
 
         double pod1Angle;
         // cerr << depth << " Cpids: " << pod1.cpId << " - " << pod2.cpId << endl;
@@ -306,14 +270,11 @@ private:
         double py = pod1->velocity.y + pod2->velocity.y;
 
         double v1x = px - pod1->velocity.x;
-        double v1y = py - pod1->velocity.y;
-
-        double v2x = px - pod2->velocity.x;
-        double v2y = py - pod2->velocity.y;
+        double v1y = px - pod1->velocity.x;
 
         // cerr << v1x << " | " << v1y << "  <> " << v2x <<  " | " << v2y << endl;
-        pod1->velocity = Vector2D(v1x, v1y);
-        pod2->velocity = Vector2D(v2x, v2y);
+        pod1->velocity = Vector2D(px - pod1->velocity.x, px - pod1->velocity.x);
+        pod2->velocity = Vector2D(px - pod2->velocity.x, py - pod2->velocity.y);
     }
 
     /**
@@ -324,14 +285,22 @@ private:
     double getNodeScore(SimulationNode *node) {
         int pod1CpId = node->pod1.cpId;
 
-        double pod1CpDistance = MAX_CP_DISTANCE - length(node->pod1.pos, track->getCp(pod1CpId));
+        double score = MAX_CP_DISTANCE - length(node->pod1.pos, Track::calcOptimalCpPos(&node->pod1, track->getCp(pod1CpId), track->getCp(pod1CpId + 1)));
 
-        pod1CpDistance += pod1CpId * MAX_CP_DISTANCE;
+        score += pod1CpId * MAX_CP_DISTANCE;
 
-        /*pod1CpDistance += length(node->pod1.velocity) *
-                cos(normalize_angle(angle(node->pod1.pos, track->getCp(pod1CpId)) - angle(node->pod1.velocity)) / 180 * PI);*/
-        // TODO: Subtract opponents
-        return pod1CpDistance;
+        double opp1Dist = MAX_CP_DISTANCE - length(node->opponent1.pos, track->getCp(node->opponent1.cpId));
+        double opp2Dist = MAX_CP_DISTANCE - length(node->opponent2.pos, track->getCp(node->opponent2.cpId));
+
+        if (node->opponent1.cpId * MAX_CP_DISTANCE + opp1Dist > node->opponent2.cpId*MAX_CP_DISTANCE + opp2Dist) {
+            score -= node->opponent1.cpId * MAX_CP_DISTANCE / 2.0;
+            score -= opp1Dist / 2.0;
+        } else {
+            score -= node->opponent2.cpId * MAX_CP_DISTANCE / 2.0;
+            score -= opp2Dist / 2.0;
+        }
+
+        return score;
     }
 };
 
