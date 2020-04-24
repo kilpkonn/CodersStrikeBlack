@@ -9,6 +9,7 @@
 #define MAX_THRUST 100
 #define BOOST_THRUST 650
 #define SHIELD_COOL_DOWN 3
+#define MAX_DEGREES_PER_TURN 18
 #define DRAG 0.85
 
 #define MAX_ANGLE_ALLOWED_BOOST 15
@@ -16,9 +17,9 @@
 #define TARGET_AHEAD_DISTANCE 5000
 #define MIN_SHIELD_IMPULSE 200
 
-#define SIMULATION_CHILD_COUNT 7
-#define SIMULATION_DEPTH 4
-#define SIMULATION_ANGLE_DIFF 110
+#define SIMULATION_CHILD_COUNT 3
+#define SIMULATION_DEPTH 6
+#define SIMULATION_ANGLE_DIFF 2 * MAX_DEGREES_PER_TURN
 #define SIMULATION_STEP_LENGTH 1
 
 #define PI 3.14159265
@@ -170,7 +171,7 @@ public:
                                         (pod->velocity.y + sin(podAngle) * pod->thrust) * DRAG);
         Vector2D newPos = Vector2D(pod->pos.x + newVelocity.x * steps, pod->pos.y + newVelocity.y * steps); // Use average instead?
         int newCpId = length(pod->pos, getCp(pod->cpId)) < CHECKPOINT_RADIUS ? pod->cpId + 1 : pod->cpId;
-        double newAngle = angle(newPos, getCp(newCpId));
+        double newAngle = podAngle * 180 / PI;
         return {newPos, newVelocity, newAngle, newCpId, pod->thrust, pod->boostUsed, pod->shieldCoolDown - 1,
                 pod->target}; // Remove target?
     }
@@ -218,7 +219,7 @@ public:
             return *this;
         }
 
-        double pod1BaseAngle = angle(pod1.pos, Track::calcOptimalCpPos(&pod1, track->getCp(pod1.cpId), track->getCp(pod1.cpId + 1)));
+        double pod1BaseAngle = pod1.angle; //angle(pod1.pos, Track::calcOptimalCpPos(&pod1, track->getCp(pod1.cpId), track->getCp(pod1.cpId + 1)));
 
         double pod1Angle;
         // cerr << depth << " Cpids: " << pod1.cpId << " - " << pod2.cpId << endl;
@@ -242,6 +243,7 @@ public:
                 //    cerr << pod1.velocity.x << " - " << pod1.velocity.y << " o " << opponent1.velocity.x << " - " << opponent1.velocity.y << endl;
                     resolveCollisions(&newPod1, &newOpponent1);
                     resolveCollisions(&newPod1, &newOpponent2);
+                    resolveCollisions(&newPod1, &newPod2);
                 //}
 
                 // resolveCollisions(&newPod1, &newPod2, &newOpponent1, &newOpponent2);
@@ -387,12 +389,16 @@ private:
             }
         } else {
             // Ram
-            Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 4,
-                                       opponentToRam.pos.y + opponentToRam.velocity.y * 4);
-            if (track.willCollide(&pod1, &pod2, 7)) {
-                cerr << "Friendly fire!!!" << endl;
-                pod->target = Track::calculateTarget(pod, angle(pod->pos, pod1.pos) + 90);
+            double stepsAhead = 1 + length(pod->pos, opponentToRam.pos) / (length(pod->velocity) / length(opponentToRam.velocity)) / 1500;
+            stepsAhead = min(7.0, stepsAhead);
+            cerr << stepsAhead << "steps " << endl;
+            Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * stepsAhead,
+                                       opponentToRam.pos.y + opponentToRam.velocity.y * stepsAhead);
 
+            if (length(opponentToRam.pos, cp) > POD_RADIUS * 2 +length(pod1.pos, cp)
+            && track.willCollide(&pod1, &pod2, 12)) {
+                cerr << "Friendly fire!!!" << endl;
+                pod->target = Track::calculateTarget(pod, angle(pod->pos, track.getCp(opponentToRam.cpId + 1)));
             } else {
                 pod->target = target;
             }
