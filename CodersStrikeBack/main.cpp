@@ -375,7 +375,7 @@ private:
             pod->target = torrentCp;
 
             // Geometric array sum
-            if (length(pod->pos, torrentCp) > length(pod->velocity) / (1 - DRAG)) {
+            if (length(pod->pos, torrentCp) > length(pod->velocity) / (1 - DRAG) && !track.willCollide(&pod1, &pod2, 7)) {
                 pod->thrust = MAX_THRUST;
             } else {
                 pod->thrust = 0;
@@ -387,11 +387,10 @@ private:
             }
         } else {
             // Ram
-            Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 2,
-                                       opponentToRam.pos.y + opponentToRam.velocity.y * 2);
+            Vector2D target = Vector2D(opponentToRam.pos.x + opponentToRam.velocity.x * 4,
+                                       opponentToRam.pos.y + opponentToRam.velocity.y * 4);
             if (track.willCollide(&pod1, &pod2, 7)) {
                 cerr << "Friendly fire!!!" << endl;
-                // TODO: only works if pod2 is ramming
                 pod->target = Track::calculateTarget(pod, angle(pod->pos, pod1.pos) + 90);
 
             } else {
@@ -412,6 +411,10 @@ private:
             if (length(newPod.pos, newOpponent1.pos) < POD_RADIUS * 2 || length(newPod.pos, newOpponent2.pos) < POD_RADIUS * 2) {
                 cerr << "SHIELD!" << endl;
                 pod->shieldCoolDown = SHIELD_COOL_DOWN;
+                // isRamming = false;
+            }
+
+            if (length(pod->pos, track.getCp(opponentToRam.cpId)) > length(opponentToRam.pos, track.getCp(opponentToRam.cpId)) + POD_RADIUS * 2) {
                 isRamming = false;
             }
         }
